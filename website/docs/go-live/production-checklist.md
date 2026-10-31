@@ -26,11 +26,11 @@ PC = Production. MC = Mission Critical and Dedicated. A line marked for PC appli
 | ☐ | Every write sends `x-amz-content-sha256` and every POST an `Idempotency-Key`, the same on each retry | PC |
 | ☐ | Retries: 429, 5xx and network errors, backoff with jitter, `retry-after` honoured; other 4xx never retried unchanged | PC |
 | ☐ | Error handling branches on `error_code`, and tolerates unknown codes, fields and event types | PC |
-| ☐ | Sequences assigned per stream and the last acknowledged one persisted; resume after restart tested | PC |
+| ☐ | Each forming series' closed segments, right edge and edge stored in one write, one writer per series; carrying on after a restart tested | PC |
 | ☐ | The jurisdiction endpoint is used, never a regional address | PC |
 | ☐ | `traceparent` sent; `server-timing` recorded | PC |
 | ☐ | Profile versions pinned where results must reproduce | PC |
-| ☐ | gRPC streams and subscriptions reconnect on `GOAWAY` or reset and resume by sequence or event id | MC |
+| ☐ | gRPC connections reconnect on `GOAWAY` or reset and resend what was not answered | MC |
 | ☐ | Callers run in two regions | MC |
 
 ## Events
@@ -40,7 +40,6 @@ PC = Production. MC = Mission Critical and Dedicated. A line marked for PC appli
 | ☐ | Signatures verified on the raw body; stale timestamps rejected; `id` deduplicated | PC |
 | ☐ | 2xx returned within 10 seconds; work done from a queue with a dead-letter queue | PC |
 | ☐ | Webhook secret rotation tested with both secrets live | PC |
-| ☐ | Subscription consumers acknowledge and resume; `lag` messages alert | MC |
 
 ## Data
 
@@ -55,7 +54,7 @@ PC = Production. MC = Mission Critical and Dedicated. A line marked for PC appli
 
 | | Check | Plan |
 |---|---|---|
-| ☐ | Peak bars a second, open streams and backfill volume within the plan, or extra capacity confirmed | PC |
+| ☐ | Peak bars a second and backfill volume within the plan, or extra capacity confirmed | PC |
 | ☐ | Load and soak tests passed (playbook stage 8) | PC |
 | ☐ | Failover rehearsal passed | MC |
 
@@ -63,7 +62,7 @@ PC = Production. MC = Mission Critical and Dedicated. A line marked for PC appli
 
 | | Check | Plan |
 |---|---|---|
-| ☐ | Alerts on success rate, p99, 429 rate, sequence gaps, event lag and dead-letter depth, routed to on-call | PC |
+| ☐ | Alerts on success rate, p99, 429 rate, edge and out-of-order errors, event lag and dead-letter depth, routed to on-call | PC |
 | ☐ | On-call subscribed to `status.patternode.com` | PC |
 | ☐ | Runbooks written and found by on-call (playbook stage 9) | PC |
 | ☐ | Technical contacts can open Severity 1 by phone | MC |

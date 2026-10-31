@@ -31,7 +31,7 @@ Decide, and write down:
 
 1. The grade. What happens to your users if Delve is unavailable for an hour? Delayed analysis is Production. A control room losing a view it operates from, or a desk unable to trade a signal, is Mission Critical. Read [Plans](../service/plans.md).
 2. The jurisdiction, where your data must stay: Australia and New Zealand, the EU or the US ([Resilience](../service/resilience.md#jurisdictions)).
-3. The transports. REST serves every plan and is enough for most; add gRPC streams for sustained high rates or tight tail latency, and a WebSocket subscription or your event bus for events ([Real-time](../service/realtime.md#transports)).
+3. The transports. REST serves every plan and is enough for most; add gRPC for sustained high rates or tight tail latency, and your event bus for events ([Real-time](../service/realtime.md#transports)).
 4. Your own service level, and the share of it you give to Patternode. If your product promises 99.95% and depends on Patternode in series, Patternode must be better than that: choose Mission Critical.
 5. Two technical contacts, by name and work email. They receive the admin key and are the only people Patternode acts for on credentials. Two, so a credential can be rotated when one is away.
 6. Your blackout periods (Mission Critical and Dedicated): your venues' trading hours, or the conditions under which your operator declares an emergency.
@@ -65,13 +65,14 @@ prints your staging account id and a demonstration segmentation, using your juri
 python mock/mock_patternode.py
 ```
 
-The mock checks what the service checks at the door (key shape, body hash, scopes, time order, sequences, idempotency) and answers in the real shapes, with fake segments ([The mock server](../get-started/mock-server.md)). Copy the client you need from `examples/`, or generate one from `specs/openapi.yaml` (REST) or `specs/proto/` (gRPC), and write your tests against the mock as `examples/python/tests/test_examples.py` does.
+The mock checks what the service checks at the door (key shape, body hash, scopes, time order, the edge's seal, idempotency) and answers in the real shapes, with fake segments ([The mock server](../get-started/mock-server.md)). Copy the client you need from `examples/`, or generate one from `specs/openapi.yaml` (REST) or `specs/proto/` (gRPC), and write your tests against the mock as `examples/python/tests/test_examples.py` does.
 
 Gate: your tests pass against the mock, including:
 
 - A bad series: expect `invalid_series` with `problems`.
 - A retried write with the same `Idempotency-Key`: expect the first answer.
-- A repeated sequence and a skipped one: expect the first answer, then `sequence_gap` with `expected_sequence`.
+- A retry with the same edge and bars: expect the same answer. A bar before the edge, an edge from another series, a changed edge: expect `out_of_order`, `edge_mismatch`, `edge_invalid`.
+- Your contract tests: run `tests/contract` from this repository against the mock, then against your staging account.
 - A 429 and a 503: expect your client to wait for `retry-after` and succeed.
 - A forged webhook: expect your receiver to answer 400.
 
@@ -85,7 +86,7 @@ Write a short design, and check it against the contract.
 |---|---|
 | Series (assets times measures, or instruments times bar widths) | |
 | Bars a second, at peak (series divided by bar width, times the peak factor) | |
-| Open streams at peak | |
+| Forming series at peak | |
 | History to backfill (bars), and how fast | |
 
 Peak, not average. A storm can make every feeder report at once, and a market open makes every instrument trade at once. Compare the peak with your plan's figures ([Plans](../service/plans.md)). If it is over them, tell Patternode now: capacity is added within 10 business days.
@@ -98,9 +99,9 @@ Start from what your user sees and work back. A control room tile that must upda
 
 Your client MUST:
 
-- Retry 429, 5xx and network errors with backoff, honouring `retry-after`, with the same `Idempotency-Key` or sequence.
-- Assign each stream's sequences, persist the last one acknowledged, and resume from it after a restart, a reconnect or a failover.
-- Reconnect gRPC streams and subscriptions on `GOAWAY` or reset, resuming from the last sequence or event id.
+- Retry 429, 5xx and network errors with backoff, honouring `retry-after`, resending the request unchanged.
+- Store each forming series' closed segments, right edge and edge in one write, with one writer per series ([Your segment store](../guides/segment-store.mdx)).
+- Reconnect gRPC streams on `GOAWAY` or reset, and resend what was not answered.
 - Deduplicate events by `id`.
 - Use the jurisdiction endpoint, never a regional address, so a regional failover is invisible.
 
@@ -114,7 +115,7 @@ Gate: the design is written down, and your peak is inside your plan or Patternod
 |---|---|---|
 | Key vault | Credentials never sit in code, images or CI logs | Secrets Manager, KMS |
 | Shard store | You keep the segments, beside your own data, under your client's prefix | S3, versioned, encrypted |
-| Event receiver | Jobs and stream events arrive asynchronously; verify, deduplicate, queue | Lambda Function URL, DynamoDB, SQS |
+| Event receiver | Job and account events arrive asynchronously; verify, deduplicate, queue | Lambda Function URL, DynamoDB, SQS |
 | Ingest workload role | The only thing that reads the live credential | IAM policy |
 | Private endpoint (Mission Critical, Dedicated) | Traffic to Patternode never crosses the internet | An interface VPC endpoint to the service name in your pack |
 
@@ -124,7 +125,7 @@ terraform init
 terraform apply -var-file=staging.tfvars
 ```
 
-On Mission Critical, apply it in each region your callers run in. See [Partner building blocks](../guides/building-blocks.md) for other stacks.
+On Mission Critical, apply it in each region your callers run in. See [Your side](../architecture/partner-side.md) for other stacks.
 
 Gate: `terraform output webhook_url` prints an HTTPS URL in each region.
 
@@ -182,9 +183,9 @@ Gate: the segments of one real series are in your shard store, and `GET /v1/usag
 | History, galleries, reports | [Finished series](../guides/finished-series.mdx) |
 | Live tiles; act as a segment closes | [Forming series](../guides/forming-series.mdx), batched or on gRPC at volume |
 | Years of history, or a backtest | [Backfill](../guides/backfill.mdx), in Parquet or Arrow at volume |
-| Hear when something happens | [Webhooks](../guides/webhooks.mdx), a subscription, or your event bus |
+| Hear when something happens | [Webhooks](../guides/webhooks.mdx), or your event bus |
 
-Gate: each flow runs end to end in staging, including events received, verified and deduplicated, and a restart of your ingest workload that resumes every stream from its last sequence without a gap.
+Gate: each flow runs end to end in staging, including events received, verified and deduplicated, and a restart of your ingest workload that carries every forming series on from its stored edge without a gap.
 
 ## Stage 8: prove it
 
@@ -194,7 +195,7 @@ Run these against your staging account, which is on the same plan as production.
 |---|---|---|
 | Load | Your peak from stage 3, for an hour, then twice your peak for 10 minutes | Your latency budget holds at peak; at twice peak, 429s with `retry-after` and no errors your client does not absorb |
 | Soak | Your normal rate for 24 hours | No growth in latency, memory or open connections on your side; usage report matches your counts |
-| Failover rehearsal (Mission Critical, Dedicated) | Patternode drains the region serving your staging account during the window | Your users see nothing beyond your budget; no sequence gaps; no lost or unhandled events |
+| Failover rehearsal (Mission Critical, Dedicated) | Patternode drains the region serving your staging account during the window | Your users see nothing beyond your budget; no series left behind its edge; no lost or unhandled events |
 | Credential rotation | Rotate the live key and the webhook secret under load | No failed request, no rejected delivery |
 | Backfill at scale | Your largest backfill, in the format you will use | Inside your planned time; usage as estimated |
 
@@ -204,13 +205,13 @@ Gate: every test passed, with the results written down.
 
 | Area | In place |
 |---|---|
-| Monitoring | Your own indicators per transport: success rate, p99 latency, 429 rate, sequence gaps, event lag, dead-letter depth. Alerts on each, routed to your on-call |
+| Monitoring | Your own indicators per transport: success rate, p99 latency, 429 rate, out-of-order and edge errors, event lag, dead-letter depth. Alerts on each, routed to your on-call |
 | Patternode's view | `status.patternode.com` subscribed to by your on-call; `GET /v1/service_levels` in your monthly review |
 | Tracing | W3C `traceparent` sent on every request, so `server-timing` shows Patternode's share |
-| Runbooks | For: 429 storm, 5xx burst, failover, credential leak, webhook secret rotation, dead-letter redrive, stream resume after a long outage |
+| Runbooks | For: 429 storm, 5xx burst, failover, credential leak, webhook secret rotation, dead-letter redrive, catching a series up after a long outage |
 | Support | Technical contacts able to open Severity 1 by phone; your plan's numbers in the runbooks |
 | Blackout periods | Registered with Patternode (Mission Critical, Dedicated) |
-| Exit | Your exit plan: where segments are (yours already), how streams are exported, who is told |
+| Exit | Your exit plan: segments and edges are yours already; who is told |
 
 Gate: a person on call can find each runbook, and a dry run of the credential-leak runbook has been done.
 

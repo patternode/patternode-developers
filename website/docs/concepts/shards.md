@@ -39,7 +39,7 @@ A shard is a fragment of a time series that keeps its shape at any scale. Each s
 | Field | Meaning |
 |---|---|
 | `height` | The level. 1 is the finest segments above your bars; higher is coarser. The top is the whole series |
-| `id` | `h<height>@<open_time>`. Stable: the same segment has the same id in a segmentation and in every stream event |
+| `id` | `h<height>@<open_time>`. Stable: the same segment has the same id in a segmentation and in every extension |
 | `parent` | The segment one level up that contains it |
 | `bars` | How many of your bars it covers |
 | open, high, low, close with times | The four vertices of its shape |
@@ -57,6 +57,6 @@ A shard is a fragment of a time series that keeps its shape at any scale. Each s
 | | Finished | Forming |
 |---|---|---|
 | You have | The whole series, or a window of it | One more bar at a time |
-| You call | `POST /v1/segmentations` (or an upload and a job) | `POST /v1/streams`, then `/observations` |
-| You get | Every segment | What this bar did at each level, and the right edge |
+| You call | `POST /v1/segmentations` (or a job from your storage) | `POST /v1/segmentations/extend`, with the edge |
+| You get | Every segment | The segments the bars closed, the right edge, and a new edge to store |
 | Same result | Yes: appending every bar gives the same segments as sending them all at once | |

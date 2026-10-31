@@ -9,7 +9,7 @@ jobs:
   specs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npx --yes @redocly/cli@2 lint specs/openapi.yaml
@@ -19,12 +19,14 @@ jobs:
   examples:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with: { python-version: "3.12" }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: python -m unittest discover -s examples/python/tests -v
+      - name: The contract suite, against the mock
+        run: python -m unittest discover -s tests/contract -v
       - name: TypeScript examples against the mock
         run: |
           PATTERNODE_MOCK_QUIET=1 python mock/mock_patternode.py &
@@ -39,8 +41,8 @@ jobs:
   terraform:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
       - run: terraform fmt -check -recursive terraform
       - working-directory: terraform/aws/delve-partner
         run: terraform init -backend=false && terraform validate
@@ -48,16 +50,18 @@ jobs:
   site:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: website/package-lock.json }
+      - name: Diagrams match their source
+        run: python website/diagrams/architecture.py --check
       - working-directory: website
         run: npm ci && npm run build
 
   public-content:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: No live-looking keys outside the mock's fake ones
         run: |
           if grep -rnIE '\bpnk_(live|test|admin)_[0-9A-Za-z]{36}\b' --exclude-dir=node_modules --exclude-dir=.git . \

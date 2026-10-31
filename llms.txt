@@ -1,6 +1,6 @@
 # Patternode for developers
 
-> The API contracts, examples and guides for integrating with Patternode's products: Delve (the shards toolkit) now, and Essence, Sentinel and Foresight, which run on Delve. Build and test against the mock (`python mock/mock_patternode.py`) first. The specs in `specs/` are the contract. Never put an API key in code, a file, a log or a chat. Real access is requested by a person (`website/docs/get-started/access.md`).
+> Patternode keeps none of your series: a forming series travels as a sealed edge you store and send back with the next bars. The API contracts, examples and guides for integrating with Patternode's products: Delve (the shards toolkit) now, and Essence, Sentinel and Foresight, which run on Delve. Build and test against the mock (`python mock/mock_patternode.py`) first. The specs in `specs/` are the contract. Never put an API key in code, a file, a log or a chat. Real access is requested by a person (`website/docs/get-started/access.md`).
 
 The site is https://developers.patternode.com, with every page as Markdown and its own index at https://developers.patternode.com/llms.txt. Paths below are in this repository.
 
@@ -17,19 +17,26 @@ The site is https://developers.patternode.com, with every page as Markdown and i
 - [OpenAPI 3.1](specs/openapi.yaml): every REST operation, with `x-status`
 - [AsyncAPI 3.1](specs/asyncapi.yaml): every event, on webhooks, subscriptions and event buses
 - [gRPC](specs/proto/patternode/delve/v1/delve.proto): the high-volume transport
-- [JSON Schemas](specs/schemas/): bar, sample, segment box, series event, error, event
+- [JSON Schemas](specs/schemas/): bar, sample, segment box, error, event
+- [Contract tests](tests/contract/test_contract.py): the contract as tests, for any implementation
+
+## Architecture
+
+- [Overview](website/docs/architecture/index.md): the picture, at a glance, principles
+- [Integration](website/docs/architecture/integration.md), [Your side](website/docs/architecture/partner-side.md), [Deployment](website/docs/architecture/deployment.md), [Security](website/docs/architecture/security.md)
+- [Quant funds](website/docs/architecture/quant/index.md), [Reference architectures](website/docs/architecture/reference-architectures.md)
+- [Detailed flows](website/docs/architecture/flows.md), [Decisions you make](website/docs/architecture/decisions.md)
 
 ## Understand
 
 - [Shards and bars](website/docs/concepts/shards.md): what you send and what you get
 - [Requests, errors and limits](website/docs/concepts/requests.md): body hash, idempotency, error codes, rate limits, retries
 - [Data boundary](website/docs/concepts/data-boundary.md): what Patternode sees and keeps; naming series
-- [Architecture](website/docs/concepts/architecture.md): parties, flows and the products
 
 ## Build
 
 - [Integration patterns](website/docs/guides/integration-patterns.md): finished series, forming series, backfill, webhooks
-- [Partner building blocks](website/docs/guides/building-blocks.md): what you build on your side
+- [Your segment store](website/docs/guides/segment-store.mdx): keep segments and edges, query them, carry series on
 - [AWS with Terraform](website/docs/guides/aws-terraform.md): the partner side, as code
 - [Python client](examples/python/patternode_client.py), [TypeScript client](examples/typescript/src/client.ts)
 - [Utilities example](examples/industries/utilities/historian_to_delve.py), [finance example](examples/industries/finance/trades_to_delve.py)

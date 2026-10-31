@@ -4,6 +4,10 @@ info:
   version: 1.0.0-draft
   summary: Segment time series into shards with Delve, and manage the keys and account that run it.
   description: |
+    Patternode keeps none of your series: no copies, no checkpoints, no results. A forming
+    series' state travels with you as a sealed `edge`; files are read from and written to
+    your own storage. Only account, usage and audit metadata are kept.
+
     One API for every Patternode product, and one functional contract for every plan: a plan
     changes capacity, service levels and transports, never routes, fields or semantics. The
     service levels are the developer site's Service contract section.
@@ -69,7 +73,7 @@ paths:
                 id: key_01JBX4Q8M2
                 kind: live
                 name: ingest-prod
-                scopes: [segment:run, segment:read, series:write, stream:write, stream:read]
+                scopes: [segment:run, segment:read]
                 account: acct_01JBX3ZK7T
                 tier: start
                 expires_at: "2027-01-28T00:00:00Z"
@@ -82,7 +86,8 @@ paths:
       description: |
         Send a finished series as bars (or samples, which the service turns into bars).
         Back come the segment boxes at every level, parents before children, with the open
-        right edge marked `provisional`. For more than 5 MB of body use an upload and a job.
+        right edge marked `provisional`. For more than 5 MB, run a job from your own storage.
+        Patternode keeps nothing of the series after it answers.
 
         A test key accepts only `{"demo": "walk"}` or `{"demo": "sensor"}` and is never billed.
       tags: [Delve]
@@ -134,49 +139,138 @@ paths:
         - bearer: [segment:run]
         - apiKey: [segment:run]
 
-  /v1/uploads:
+  /v1/segmentations/extend:
     post:
-      operationId: createUpload
-      summary: Get a presigned form for a large series file
+      operationId: extendSeries
+      summary: Extend a forming series with new bars, from its edge
       description: |
-        Returns a form to POST one CSV or JSON Lines file straight to storage. The declared
-        `size_bytes` counts against the day's upload allowance when the slot is issued, and
-        storage accepts no more than it.
+        Patternode keeps nothing between calls. A forming series is carried by you: each
+        answer returns its `edge`, a sealed token holding the open right edge of every level.
+        Store it with the segments, and send it back with the next bars. Without an `edge`,
+        the call starts a new series.
+
+        The same `edge` with the same bars always gives the same answer, so a retry after a
+        timeout is safe: resend the request you sent. Bars must open after the edge's last
+        bar closed (`edge_last_close_time`); an earlier bar is refused with 409 `out_of_order`.
+        Extending bar by bar gives the same segments as sending them all as a finished series.
+
+        The edge is sealed: encrypted and signed by Patternode, bound to your account, the
+        series name and the profile version. You cannot read or change it, and it is no use
+        to anyone else. What it means for drawing is returned beside it, readable, as
+        `right_edge`.
       tags: [Delve]
-      x-status: available
+      x-status: preview
       parameters:
         - $ref: "#/components/parameters/ContentSha256"
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/Traceparent"
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/UploadRequest" }
-            example: { format: jsonl, size_bytes: 48000000 }
+            schema: { $ref: "#/components/schemas/ExtendRequest" }
+            examples:
+              start:
+                summary: The first bars of a new series, no edge
+                value:
+                  series: exu/7f3a9c/1b02e4/export-kw
+                  profile: standard@2026-11
+                  bars:
+                    - [1730246400000, 1730249999000, 412.0, 430.5, 405.2, 428.1]
+              next:
+                summary: The next bar, with the edge from the last answer
+                value:
+                  series: exu/7f3a9c/1b02e4/export-kw
+                  profile: standard@2026-11
+                  edge: pne1.eyJ2IjoxfQ.c2VhbGVk.bWFj
+                  bars:
+                    - [1730250000000, 1730253599000, 428.1, 441.0, 420.3, 436.7]
       responses:
-        "201":
-          description: The upload slot.
+        "200":
+          description: The segments the bars closed, the new right edge, and the new edge to store.
           headers:
             request-id: { $ref: "#/components/headers/RequestId" }
+            ratelimit-policy: { $ref: "#/components/headers/RateLimitPolicy" }
+            ratelimit: { $ref: "#/components/headers/RateLimit" }
+            server-timing: { $ref: "#/components/headers/ServerTiming" }
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Upload" }
+              schema: { $ref: "#/components/schemas/Extension" }
         "400": { $ref: "#/components/responses/InvalidRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/EdgeConflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Overloaded" }
+      security:
+        - bearer: [segment:run]
+        - apiKey: [segment:run]
+
+  /v1/segmentations/extend/batch:
+    post:
+      operationId: extendSeriesBatch
+      summary: Extend many forming series in one request
+      description: |
+        Up to 1,000 items, each an `extend` of one series with its own edge and bars,
+        answered in the same position. One item failing does not fail the others: check each
+        result's `status`. Patternode keeps nothing between calls.
+      tags: [Delve]
+      x-status: preview
+      parameters:
+        - $ref: "#/components/parameters/ContentSha256"
+        - $ref: "#/components/parameters/Traceparent"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                time_unit: { $ref: "#/components/schemas/TimeUnit" }
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items: { $ref: "#/components/schemas/ExtendRequest" }
+      responses:
+        "200":
+          description: One result per item, in order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object, results]
+                properties:
+                  object: { const: extension_batch }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [status]
+                      properties:
+                        status: { type: integer, description: The HTTP status this item would have had alone. }
+                        result: { $ref: "#/components/schemas/Extension" }
+                        error: { $ref: "#/components/schemas/Error" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
       security:
-        - bearer: [series:write]
-        - apiKey: [series:write]
+        - bearer: [segment:run]
+        - apiKey: [segment:run]
 
   /v1/segmentations/jobs:
     post:
       operationId: createSegmentationJob
-      summary: Segment an uploaded file as a job
+      summary: Segment a large file from your storage, as a job
       description: |
-        Answers 202 at once. Poll the job, or receive `segmentation.job.succeeded` or
-        `segmentation.job.failed` at your webhook (see `specs/asyncapi.yaml`).
-        A failed job is not charged.
+        For bodies over 5 MB and backfills. The file stays in your storage: give a link
+        Patternode can read it from (`source_url`, a presigned GET) and a link it writes the
+        result to (`result_url`, a presigned PUT). Patternode reads, segments, writes, and
+        keeps nothing. Answers 202 at once; poll the job, or receive
+        `segmentation.job.succeeded` or `segmentation.job.failed` at your webhook. The job
+        record holds only its status and usage. A failed job is not charged.
       tags: [Delve]
       x-status: available
       parameters:
@@ -188,9 +282,12 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/JobRequest" }
             example:
-              upload_id: upl_01JBX6V0QK
-              kind: bars
               series: exu/7f3a9c/1b02e4/export-kw
+              profile: standard@2026-11
+              kind: bars
+              format: parquet
+              source_url: https://exampleco-shards.s3.ap-southeast-2.amazonaws.com/in/export-kw.parquet?X-Amz-Signature=...
+              result_url: https://exampleco-shards.s3.ap-southeast-2.amazonaws.com/out/export-kw.json?X-Amz-Signature=...
               webhook_url: https://hooks.example-monitoring.com/patternode
       responses:
         "202":
@@ -236,210 +333,6 @@ paths:
       security:
         - bearer: [segment:read]
         - apiKey: [segment:read]
-
-  /v1/streams:
-    get:
-      operationId: listStreams
-      summary: List open streams, with their right edges (export)
-      tags: [Delve]
-      x-status: preview
-      parameters:
-        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
-        - { name: starting_after, in: query, schema: { type: string } }
-      responses:
-        "200":
-          description: A page of streams.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [object, data, has_more]
-                properties:
-                  object: { const: list }
-                  data:
-                    type: array
-                    items: { $ref: "#/components/schemas/Stream" }
-                  has_more: { type: boolean }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-      security:
-        - bearer: [stream:read]
-        - apiKey: [stream:read]
-    post:
-      operationId: openStream
-      summary: Open a forming series with its first observation
-      description: |
-        A forming series is sent one bar at a time, as it happens. Opening a stream returns
-        its `stream_id`; Patternode keeps a checkpoint of the open right edge for it and
-        nothing else. Appending every bar gives the same segments as sending them all to
-        `POST /v1/segmentations`.
-      tags: [Delve]
-      x-status: preview
-      parameters:
-        - $ref: "#/components/parameters/ContentSha256"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/StreamOpenRequest" }
-            example:
-              series: exu/7f3a9c/1b02e4/export-kw
-              profile: standard
-              bar: [1730246400000, 1730249999000, 412.0, 430.5, 405.2, 428.1]
-      responses:
-        "201":
-          description: The stream, with the outcome of its first bar.
-          headers:
-            request-id: { $ref: "#/components/headers/RequestId" }
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Appended" }
-        "400": { $ref: "#/components/responses/InvalidRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "402": { $ref: "#/components/responses/PaymentRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-      security:
-        - bearer: [stream:write]
-        - apiKey: [stream:write]
-
-  /v1/streams/observations:
-    post:
-      operationId: appendObservationsBatch
-      summary: Append bars to many streams in one request
-      description: |
-        Up to 1,000 bars across any number of open streams. Each item is applied as a single
-        append would be, by stream and sequence, and answered in the same position. One item
-        failing does not fail the others: check each result's `status`.
-      tags: [Delve]
-      x-status: preview
-      parameters:
-        - $ref: "#/components/parameters/ContentSha256"
-        - $ref: "#/components/parameters/Traceparent"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [observations]
-              properties:
-                time_unit: { $ref: "#/components/schemas/TimeUnit" }
-                observations:
-                  type: array
-                  minItems: 1
-                  maxItems: 1000
-                  items:
-                    type: object
-                    required: [stream_id, sequence, bar]
-                    properties:
-                      stream_id: { type: string }
-                      sequence: { $ref: "#/components/schemas/Sequence" }
-                      bar: { $ref: "#/components/schemas/Bar" }
-            example:
-              observations:
-                - { stream_id: str_01JBXA, sequence: 42, bar: [1730250000000, 1730253599000, 428.1, 441.0, 420.3, 436.7] }
-                - { stream_id: str_01JBXB, sequence: 7, bar: [1730250000000, 1730253599000, 51.2, 52.0, 50.9, 51.7] }
-      responses:
-        "200":
-          description: One result per observation, in order.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [object, results]
-                properties:
-                  object: { const: observation_batch_result }
-                  results:
-                    type: array
-                    items:
-                      type: object
-                      required: [status]
-                      properties:
-                        status: { type: integer, description: The HTTP status this append would have had alone. }
-                        result: { $ref: "#/components/schemas/Appended" }
-                        error: { $ref: "#/components/schemas/Error" }
-        "400": { $ref: "#/components/responses/InvalidRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-      security:
-        - bearer: [stream:write]
-        - apiKey: [stream:write]
-
-  /v1/streams/{stream_id}/observations:
-    post:
-      operationId: appendObservation
-      summary: Append one bar to a forming series
-      description: |
-        Returns whether the bar `extended` the open segment at every level or `segmented`
-        one or more levels, with the events in order and the right edge as it now stands.
-        Bars must arrive in time order; an out-of-order bar is refused with 409 and leaves
-        the stream unchanged, so the caller can resend in order.
-      tags: [Delve]
-      x-status: preview
-      parameters:
-        - $ref: "#/components/parameters/StreamId"
-        - $ref: "#/components/parameters/ContentSha256"
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/Traceparent"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/ObservationRequest" }
-            example:
-              sequence: 2
-              bar: [1730250000000, 1730253599000, 428.1, 441.0, 420.3, 436.7]
-      responses:
-        "200":
-          description: The outcome of the bar.
-          headers:
-            request-id: { $ref: "#/components/headers/RequestId" }
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Appended" }
-        "400": { $ref: "#/components/responses/InvalidRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/OutOfOrder" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-      security:
-        - bearer: [stream:write]
-        - apiKey: [stream:write]
-
-  /v1/streams/{stream_id}:
-    get:
-      operationId: getStream
-      summary: A stream's right edge
-      tags: [Delve]
-      x-status: preview
-      parameters:
-        - $ref: "#/components/parameters/StreamId"
-      responses:
-        "200":
-          description: The stream.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Stream" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "404": { $ref: "#/components/responses/NotFound" }
-      security:
-        - bearer: [stream:read]
-        - apiKey: [stream:read]
-    delete:
-      operationId: closeStream
-      summary: Close a stream and delete its checkpoint
-      tags: [Delve]
-      x-status: preview
-      parameters:
-        - $ref: "#/components/parameters/StreamId"
-      responses:
-        "204": { description: Closed. The checkpoint is deleted. }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "404": { $ref: "#/components/responses/NotFound" }
-      security:
-        - bearer: [stream:write]
-        - apiKey: [stream:write]
 
   /v1/keys:
     get:
@@ -756,7 +649,7 @@ paths:
                 grant_type: { const: client_credentials }
                 client_assertion_type: { const: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" }
                 client_assertion: { type: string }
-                scope: { type: string, examples: ["segment:run stream:write"] }
+                scope: { type: string, examples: ["segment:run segment:read"] }
       responses:
         "200":
           description: The token.
@@ -805,7 +698,10 @@ components:
       name: Idempotency-Key
       in: header
       required: false
-      description: Any unique string. Stored 24 hours; a reused key with a different body is 422.
+      description: |
+        Any unique string. For 24 hours Patternode keeps the key with a hash of the request
+        (never its data), so a retry is not billed twice; a reused key with a different body
+        is 422. The answer itself is recomputed, deterministically.
       schema: { type: string, maxLength: 255 }
     Traceparent:
       name: traceparent
@@ -813,11 +709,6 @@ components:
       required: false
       description: W3C Trace Context. Patternode continues your trace and reports its time in `server-timing`.
       schema: { type: string }
-    StreamId:
-      name: stream_id
-      in: path
-      required: true
-      schema: { type: string, pattern: "^str_[0-9A-Za-z]+$" }
     KeyId:
       name: key_id
       in: path
@@ -876,10 +767,10 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
-    OutOfOrder:
+    EdgeConflict:
       description: |
-        `out_of_order`: the bar opens before the stream's last bar closed. `sequence_gap`: the
-        sequence skips one; `details.expected_sequence` says which to send. The stream is unchanged.
+        `out_of_order`: a bar opens before the edge's last bar closed. `edge_mismatch`: the
+        edge belongs to another series, profile version or account. Nothing is applied.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -910,8 +801,6 @@ components:
       $ref: "./schemas/sample.schema.json"
     SegmentBox:
       $ref: "./schemas/segment-box.schema.json"
-    SeriesEvent:
-      $ref: "./schemas/series-event.schema.json"
     Error:
       $ref: "./schemas/error.schema.json"
 
@@ -930,8 +819,8 @@ components:
       pattern: "^[a-z][a-z0-9-]*(@[0-9]{4}-[0-9]{2})?$"
       description: |
         The segmentation profile, optionally pinned to a version: `standard` or
-        `standard@2026-11`. Unpinned, the version current at the call (or when the stream
-        opened) is used, and the answer names it. Versions never change and are served for
+        `standard@2026-11`. Unpinned, the version current at the call (or, with an edge, the one sealed
+        in it) is used, and the answer names it. Versions never change and are served for
         at least 24 months. Your onboarding pack names the profiles for your account.
       examples: [standard, standard@2026-11]
 
@@ -943,14 +832,61 @@ components:
         The unit of every time in the request and the answer, since the Unix epoch, UTC.
         In JSON, `us` and `ns` times are strings of digits; `ms` times are integers.
 
-    Sequence:
-      type: integer
-      format: int64
-      minimum: 1
+    ExtendRequest:
+      type: object
+      required: [series, bars]
+      properties:
+        series: { $ref: "#/components/schemas/SeriesName" }
+        profile: { $ref: "#/components/schemas/Profile" }
+        time_unit: { $ref: "#/components/schemas/TimeUnit" }
+        edge:
+          $ref: "#/components/schemas/Edge"
+        bars:
+          type: array
+          minItems: 1
+          maxItems: 10000
+          items: { $ref: "#/components/schemas/Bar" }
+      additionalProperties: false
+
+    Edge:
+      type: string
+      pattern: "^pne1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+      maxLength: 65536
       description: |
-        The bar's position in its stream, assigned by you: 1 for the first bar, then one
-        more each time. A repeated sequence returns the original answer and applies nothing;
-        a skipped one is refused with 409 `sequence_gap`.
+        A forming series' state, sealed by Patternode: encrypted, signed, and bound to your
+        account, the series name and the profile version. Opaque: store it as you got it and
+        send it back unchanged. Omit it to start a series.
+
+    Extension:
+      type: object
+      required: [object, series, profile_version, bars, closed, right_edge, edge, edge_last_close_time]
+      properties:
+        object: { const: extension }
+        series: { type: string }
+        profile_version: { type: string, examples: ["standard@2026-11"] }
+        time_unit: { $ref: "#/components/schemas/TimeUnit" }
+        bars: { type: integer, description: "Bars in the series so far, these included." }
+        outcome:
+          type: string
+          enum: [started, extended, segmented]
+          description: |
+            `started` for a series' first call, `segmented` when any level closed a segment,
+            `extended` otherwise.
+        closed:
+          type: array
+          description: Segments these bars closed, now final, bottom level first. Store them; they never change.
+          items: { $ref: "#/components/schemas/SegmentBox" }
+        right_edge:
+          type: array
+          description: The open segment at each level, bottom up, all provisional. Replace the previous right edge with it.
+          items: { $ref: "#/components/schemas/SegmentBox" }
+        edge: { $ref: "#/components/schemas/Edge" }
+        edge_last_close_time:
+          description: The close time of the last bar in the edge. The next bars must open after it.
+          oneOf:
+            - type: integer
+            - type: string
+        usage: { $ref: "#/components/schemas/RunUsage" }
 
     SegmentationRequest:
       oneOf:
@@ -960,6 +896,7 @@ components:
             series: { $ref: "#/components/schemas/SeriesName" }
             profile: { $ref: "#/components/schemas/Profile" }
             time_unit: { $ref: "#/components/schemas/TimeUnit" }
+            return_edge: { type: boolean, default: false, description: "Also return the edge, to carry on as a forming series." }
             bars:
               type: array
               minItems: 2
@@ -971,6 +908,7 @@ components:
             series: { $ref: "#/components/schemas/SeriesName" }
             profile: { $ref: "#/components/schemas/Profile" }
             time_unit: { $ref: "#/components/schemas/TimeUnit" }
+            return_edge: { type: boolean, default: false }
             samples:
               type: array
               minItems: 2
@@ -1000,6 +938,13 @@ components:
           type: array
           description: Every segment above the bars, parent before child.
           items: { $ref: "#/components/schemas/SegmentBox" }
+        edge:
+          $ref: "#/components/schemas/Edge"
+          description: With return_edge, the edge to carry on from with POST /v1/segmentations/extend.
+        edge_last_close_time:
+          oneOf:
+            - type: integer
+            - type: string
         usage: { $ref: "#/components/schemas/RunUsage" }
 
     RunUsage:
@@ -1009,35 +954,29 @@ components:
         samples_billed: { type: integer }
         cost_usd: { type: number }
 
-    UploadRequest:
-      type: object
-      required: [format]
-      properties:
-        format: { type: string, enum: [csv, jsonl] }
-        size_bytes: { type: integer, minimum: 1 }
-
-    Upload:
-      type: object
-      required: [object, id, url, fields, expires_at]
-      properties:
-        object: { const: upload }
-        id: { type: string, pattern: "^upl_[0-9A-Za-z]+$" }
-        url: { type: string, format: uri, description: POST the file here as multipart/form-data. }
-        fields:
-          type: object
-          additionalProperties: { type: string }
-          description: Form fields to send before the file, unchanged.
-        max_bytes: { type: integer }
-        expires_at: { type: string, format: date-time }
-
     JobRequest:
       type: object
-      required: [upload_id, kind, series]
+      required: [series, kind, format, source_url, result_url]
       properties:
-        upload_id: { type: string }
-        kind: { type: string, enum: [bars, samples] }
         series: { $ref: "#/components/schemas/SeriesName" }
         profile: { $ref: "#/components/schemas/Profile" }
+        time_unit: { $ref: "#/components/schemas/TimeUnit" }
+        kind: { type: string, enum: [bars, samples] }
+        format: { type: string, enum: [csv, jsonl, parquet, arrow] }
+        source_url:
+          type: string
+          format: uri
+          pattern: "^https://"
+          description: A presigned GET link to the file in your storage, valid for at least an hour.
+        result_url:
+          type: string
+          format: uri
+          pattern: "^https://"
+          description: A presigned PUT link in your storage. The result is written there as a Segmentation in JSON.
+        return_edge:
+          type: boolean
+          default: false
+          description: Also return the series' edge, to carry on as a forming series from the end of the file.
         webhook_url:
           type: string
           format: uri
@@ -1054,77 +993,14 @@ components:
         series: { type: string }
         created_at: { type: string, format: date-time }
         finished_at: { type: [string, "null"], format: date-time }
-        result_url:
-          type: [string, "null"]
-          format: uri
-          description: When succeeded, a link to the Segmentation as JSON, valid 24 hours.
+        result_written:
+          type: boolean
+          description: True once the result has been written to your result_url.
         usage: { $ref: "#/components/schemas/RunUsage" }
         error:
           oneOf:
             - type: "null"
             - $ref: "./schemas/error.schema.json#/properties/error"
-
-    StreamOpenRequest:
-      type: object
-      required: [series, bar]
-      properties:
-        series: { $ref: "#/components/schemas/SeriesName" }
-        profile: { $ref: "#/components/schemas/Profile" }
-        time_unit: { $ref: "#/components/schemas/TimeUnit" }
-        bar:
-          $ref: "#/components/schemas/Bar"
-          description: The first bar. It is sequence 1.
-      additionalProperties: false
-
-    ObservationRequest:
-      type: object
-      required: [sequence, bar]
-      properties:
-        sequence: { $ref: "#/components/schemas/Sequence" }
-        time_unit: { $ref: "#/components/schemas/TimeUnit" }
-        bar: { $ref: "#/components/schemas/Bar" }
-      additionalProperties: false
-
-    Appended:
-      type: object
-      required: [object, stream_id, series, bars, outcome, events, right_edge]
-      properties:
-        object: { const: observation_result }
-        stream_id: { type: string, pattern: "^str_[0-9A-Za-z]+$" }
-        series: { type: string }
-        sequence: { $ref: "#/components/schemas/Sequence" }
-        profile_version: { type: string, examples: ["standard@2026-11"] }
-        bars: { type: integer, description: Bars in the stream after this one. }
-        outcome:
-          type: string
-          enum: [started, extended, segmented]
-          description: |
-            `started` for the first two bars of a stream, `segmented` when any level closed a
-            segment and opened another, `extended` otherwise.
-        events:
-          type: array
-          description: What this bar did at each level, from the bottom up.
-          items: { $ref: "#/components/schemas/SeriesEvent" }
-        right_edge:
-          type: array
-          description: The open segment at each level, all provisional, bottom up.
-          items: { $ref: "#/components/schemas/SegmentBox" }
-
-    Stream:
-      type: object
-      required: [object, id, series, bars, right_edge, created_at]
-      properties:
-        object: { const: stream }
-        id: { type: string }
-        series: { type: string }
-        profile_version: { type: string }
-        last_sequence: { $ref: "#/components/schemas/Sequence" }
-        bars: { type: integer }
-        right_edge:
-          type: array
-          items: { $ref: "#/components/schemas/SegmentBox" }
-        created_at: { type: string, format: date-time }
-        last_bar_at: { type: [string, "null"], format: date-time }
 
     KeyIdentity:
       type: object
@@ -1146,9 +1022,6 @@ components:
       enum:
         - segment:run
         - segment:read
-        - series:write
-        - stream:write
-        - stream:read
         - usage:read
         - keys:manage
         - billing:manage
@@ -1161,11 +1034,11 @@ components:
         name: { type: string, maxLength: 64 }
         scopes:
           description: |
-            A preset (`full`, `read-only`, `stream-only`, `admin`) or a list of scopes. Admin
+            A preset (`full`, `read-only`, `admin`) or a list of scopes. Admin
             keys hold only admin scopes; live and test keys hold none of them.
           oneOf:
             - type: string
-              enum: [full, read-only, stream-only, admin]
+              enum: [full, read-only, admin]
             - type: array
               items: { $ref: "#/components/schemas/Scope" }
         expires_in_days: { type: integer, enum: [1, 7, 30, 90] }
@@ -1258,7 +1131,7 @@ components:
             properties:
               starting_at: { type: string, format: date-time }
               key_id: { type: string }
-              kind: { type: string, enum: [segment, job, stream, demo] }
+              kind: { type: string, enum: [segment, extend, job, demo] }
               requests: { type: integer }
               samples: { type: integer }
               cost_usd: { type: number }

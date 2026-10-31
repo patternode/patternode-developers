@@ -20,7 +20,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: website/package-lock.json }
       - working-directory: website
@@ -28,7 +28,7 @@ jobs:
         env:
           SITE_URL: ${{ vars.SITE_URL || 'https://developers.patternode.com' }}
           SITE_BASE_URL: ${{ vars.SITE_BASE_URL || '/' }}
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with: { path: website/build }
 
   deploy:
@@ -39,4 +39,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

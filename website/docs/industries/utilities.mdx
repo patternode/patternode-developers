@@ -60,7 +60,7 @@ flowchart LR
 
 ## Example
 
-`examples/industries/utilities/historian_to_delve.py` reads an invented historian export of a zone substation transformer (top-oil temperature and load, compressed points with quality codes). It drops bad points, builds 15-minute bars from the kept points, names each series opaquely, sends the history as finished series with a pinned profile version, and then appends live bars for every tag in one request as each interval closes.
+`examples/industries/utilities/historian_to_delve.py` reads an invented historian export of a zone substation transformer (top-oil temperature and load, compressed points with quality codes). It drops bad points, builds 15-minute bars from the kept points, names each series opaquely, sends the history as finished series with a pinned profile version and its edge, and then extends every tag in one request, each from its stored edge, as each interval closes. Patternode keeps nothing.
 
 ```bash
 python mock/mock_patternode.py &
