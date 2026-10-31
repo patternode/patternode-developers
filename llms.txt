@@ -1,6 +1,6 @@
 # Patternode for developers
 
-> Patternode keeps none of your series: a forming series travels as a sealed edge you store and send back with the next bars. The API contracts, examples and guides for integrating with Patternode's products: Delve (the shards toolkit, formerly Mosaic) now, and Essence, Sentinel and Foresight, which run on Delve. Build and test against the mock (`python mock/mock_patternode.py`) first. The specs in `specs/` are the contract. Never put an API key in code, a file, a log or a chat. Real access is requested by a person (`website/docs/get-started/access.md`).
+> Patternode keeps none of your series: a forming series travels as a sealed edge you store and send back with the next bars. The API contracts, examples and guides for integrating with Patternode's products: Delve (the shards toolkit) now, and Essence, Sentinel and Foresight, which run on Delve. Build and test against the mock (`python mock/mock_patternode.py`) first. The specs in `specs/` are the contract. Never put an API key in code, a file, a log or a chat. Real access is requested by a person (`website/docs/get-started/access.md`).
 
 The site is https://developers.patternode.com, with every page as Markdown and its own index at https://developers.patternode.com/llms.txt. Paths below are in this repository.
 

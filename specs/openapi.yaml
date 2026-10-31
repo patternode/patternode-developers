@@ -13,7 +13,7 @@ info:
     service levels are the developer site's Service contract section.
 
     Resources are product-neutral; the tag on each
-    operation names the product it belongs to. Delve (formerly Mosaic) is the first.
+    operation names the product it belongs to. Delve is the first.
 
     Every operation carries `x-status`:
 

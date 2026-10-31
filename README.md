@@ -1,6 +1,6 @@
 # Patternode for developers
 
-Everything you need to integrate with Patternode's products: Delve, the shards toolkit (formerly Mosaic), and Essence, Sentinel and Foresight, which run on it. This repository is the source of [developers.patternode.com](https://developers.patternode.com).
+Everything you need to integrate with Patternode's products: Delve, the shards toolkit, and Essence, Sentinel and Foresight, which run on it. This repository is the source of [developers.patternode.com](https://developers.patternode.com).
 
 ## Start here
 
