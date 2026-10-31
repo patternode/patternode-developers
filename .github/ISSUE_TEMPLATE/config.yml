@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Get access (an evaluation or production account)
+    url: https://developers.patternode.com/get-started/access
+    about: Accounts and keys are arranged by email, never in a public issue. This page says what to send.
+  - name: A production problem
+    url: https://developers.patternode.com/service/support
+    about: Use your plan's support channel. Service status is at status.patternode.com.
+  - name: A security issue
+    url: https://github.com/patternode/patternode-developers/blob/main/SECURITY.md
+    about: Email security@patternode.com. Please do not open a public issue.

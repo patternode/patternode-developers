@@ -1,0 +1,47 @@
+# Patternode for developers
+
+> The API contracts, examples and guides for integrating with Patternode's products: Delve (the shards toolkit, formerly Mosaic) now, and Essence, Sentinel and Foresight, which run on Delve. Build and test against the mock (`python mock/mock_patternode.py`) first. The specs in `specs/` are the contract. Never put an API key in code, a file, a log or a chat. Real access is requested by a person (`website/docs/get-started/access.md`).
+
+The site is https://developers.patternode.com, with every page as Markdown and its own index at https://developers.patternode.com/llms.txt. Paths below are in this repository.
+
+## Start
+
+- [AGENTS.md](AGENTS.md): what an agent does, step by step
+- [Quickstart](website/docs/get-started/quickstart.mdx): the first calls, against the mock or production
+- [Getting access](website/docs/get-started/access.md): the three levels of access and how to ask
+- [Getting your API keys](website/docs/get-started/api-keys.md): kinds, scopes, storage, rotation
+- [The mock server](website/docs/get-started/mock-server.md): what it checks and what it fakes
+
+## Contracts
+
+- [OpenAPI 3.1](specs/openapi.yaml): every REST operation, with `x-status`
+- [AsyncAPI 3.1](specs/asyncapi.yaml): every event, on webhooks, subscriptions and event buses
+- [gRPC](specs/proto/patternode/delve/v1/delve.proto): the high-volume transport
+- [JSON Schemas](specs/schemas/): bar, sample, segment box, series event, error, event
+
+## Understand
+
+- [Shards and bars](website/docs/concepts/shards.md): what you send and what you get
+- [Requests, errors and limits](website/docs/concepts/requests.md): body hash, idempotency, error codes, rate limits, retries
+- [Data boundary](website/docs/concepts/data-boundary.md): what Patternode sees and keeps; naming series
+- [Architecture](website/docs/concepts/architecture.md): parties, flows and the products
+
+## Build
+
+- [Integration patterns](website/docs/guides/integration-patterns.md): finished series, forming series, backfill, webhooks
+- [Partner building blocks](website/docs/guides/building-blocks.md): what you build on your side
+- [AWS with Terraform](website/docs/guides/aws-terraform.md): the partner side, as code
+- [Python client](examples/python/patternode_client.py), [TypeScript client](examples/typescript/src/client.ts)
+- [Utilities example](examples/industries/utilities/historian_to_delve.py), [finance example](examples/industries/finance/trades_to_delve.py)
+
+## Operate
+
+- [Delve onboarding playbook](website/docs/playbooks/delve-onboarding.md): eleven gated stages to go-live
+- [Production checklist](website/docs/go-live/production-checklist.md)
+- [Troubleshooting](website/docs/go-live/troubleshooting.md)
+- [Service contract](website/docs/service/index.md): plans, service levels, resilience, real-time, security, compliance, support
+
+## Optional
+
+- [Industries](website/docs/industries/index.md)
+- [Changelog](website/docs/resources/changelog.md)

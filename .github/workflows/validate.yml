@@ -1,0 +1,66 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  specs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npx --yes @redocly/cli@2 lint specs/openapi.yaml
+      - run: npx --yes @asyncapi/cli@6 validate specs/asyncapi.yaml
+      - run: python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('specs/schemas/*.json')]"
+
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: python -m unittest discover -s examples/python/tests -v
+      - name: TypeScript examples against the mock
+        run: |
+          PATTERNODE_MOCK_QUIET=1 python mock/mock_patternode.py &
+          sleep 1
+          cd examples/typescript && npm test
+      - name: curl quickstart against the mock
+        run: |
+          PATTERNODE_MOCK_QUIET=1 python mock/mock_patternode.py &
+          sleep 1
+          PATTERNODE_API_KEY=pnk_test_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA examples/curl/quickstart.sh
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive terraform
+      - working-directory: terraform/aws/delve-partner
+        run: terraform init -backend=false && terraform validate
+
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: website/package-lock.json }
+      - working-directory: website
+        run: npm ci && npm run build
+
+  public-content:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No live-looking keys outside the mock's fake ones
+        run: |
+          if grep -rnIE '\bpnk_(live|test|admin)_[0-9A-Za-z]{36}\b' --exclude-dir=node_modules --exclude-dir=.git . \
+             | grep -vE 'pnk_(live|test|admin)_(A{36}|B{36}|C{36})'; then
+            echo "A key that is not a fake mock key was found"; exit 1
+          fi

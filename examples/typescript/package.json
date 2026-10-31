@@ -1,0 +1,11 @@
+{
+  "name": "patternode-examples-typescript",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "first-call": "node src/first-call.ts",
+    "receiver": "node src/webhook-receiver.ts",
+    "test": "node --test src/*.test.ts"
+  }
+}

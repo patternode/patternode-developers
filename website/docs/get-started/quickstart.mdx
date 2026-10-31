@@ -1,0 +1,60 @@
+---
+title: Quickstart
+sidebar_position: 1
+description: Your first call, with a test key, against the mock or production, in curl, Python or TypeScript.
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import CodeBlock from '@theme/CodeBlock';
+import curlQuickstart from '!!raw-loader!@examples/curl/quickstart.sh';
+import pyFirstCall from '!!raw-loader!@examples/python/first_call.py';
+import tsFirstCall from '!!raw-loader!@examples/typescript/src/first-call.ts';
+
+# Quickstart
+
+Two calls: who am I, then the demonstration series. They work with a test key, which costs nothing, and with no key at all against the mock.
+
+## 1. Choose where to call
+
+| Target | Base URL | Key |
+|---|---|---|
+| The mock, on your machine | `http://127.0.0.1:4010` | Any key of the right shape, e.g. `pnk_test_` and 36 `A`s |
+| Production | `https://api.patternode.com` | Your test key, from the welcome email ([Getting your API keys](api-keys.md)) |
+
+To run the mock, from the repository root (Python 3.10 or newer, nothing to install):
+
+```bash
+python mock/mock_patternode.py
+```
+
+## 2. Make the calls
+
+```bash
+export PATTERNODE_BASE_URL=http://127.0.0.1:4010
+export PATTERNODE_API_KEY=pnk_test_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+```
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="curl">
+    <CodeBlock language="bash" title="examples/curl/quickstart.sh">{curlQuickstart}</CodeBlock>
+  </TabItem>
+  <TabItem value="python" label="Python">
+    <CodeBlock language="python" title="examples/python/first_call.py">{pyFirstCall}</CodeBlock>
+  </TabItem>
+  <TabItem value="typescript" label="TypeScript">
+    <CodeBlock language="ts" title="examples/typescript/src/first-call.ts">{tsFirstCall}</CodeBlock>
+  </TabItem>
+</Tabs>
+
+These are the files in the repository, embedded at build time, and CI runs each of them against the mock. What you read here is what was tested.
+
+## 3. Read the answer
+
+A segmentation is a list of segment boxes, parents before children. Each has a level (`height`), the bars it covers, and its open, high, low and close with their times. The open right edge at each level is `provisional`. [Shards and bars](../concepts/shards.md) explains them; the [API reference](/api/patternode-api) has every field.
+
+## Next
+
+- [Getting your API keys](api-keys.md), before you need a live key.
+- [Integration patterns](../guides/integration-patterns.md), to choose how your system calls Delve.
+- The [onboarding playbook](../playbooks/delve-onboarding.md), to plan the whole route.

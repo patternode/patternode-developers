@@ -1,0 +1,1264 @@
+openapi: 3.1.0
+info:
+  title: Patternode API
+  version: 1.0.0-draft
+  summary: Segment time series into shards with Delve, and manage the keys and account that run it.
+  description: |
+    One API for every Patternode product, and one functional contract for every plan: a plan
+    changes capacity, service levels and transports, never routes, fields or semantics. The
+    service levels are the developer site's Service contract section.
+
+    Resources are product-neutral; the tag on each
+    operation names the product it belongs to. Delve (formerly Mosaic) is the first.
+
+    Every operation carries `x-status`:
+
+    - `available`: supported; changes follow the versioning policy.
+    - `preview`: works, may change with 30 days' notice; not for production alarms.
+    - `planned`: specified so you can design against it; returns 404 today.
+
+    Conventions that apply to every route are in the Concepts pages of the developer site: authentication, the
+    body hash on writes, idempotency, errors, rate-limit headers and versioning.
+  contact:
+    name: Patternode partner support
+    email: partners@patternode.com
+    url: https://patternode.com/partners
+  license:
+    name: Apache 2.0
+    identifier: Apache-2.0
+servers:
+  - url: https://api.patternode.com
+    description: Production. Routes to your account's home jurisdiction.
+  - url: https://anz.api.patternode.com
+    description: Production, Australia and New Zealand jurisdiction.
+  - url: https://eu.api.patternode.com
+    description: Production, European Union jurisdiction.
+  - url: https://us.api.patternode.com
+    description: Production, United States jurisdiction.
+  - url: http://localhost:4010
+    description: The mock server in mock/, for development and CI.
+security:
+  - bearer: []
+  - apiKey: []
+tags:
+  - name: Account
+    description: Who you are, your keys, limits and the webhook endpoint. Product-neutral.
+  - name: Delve
+    description: |
+      Delve, the shards toolkit. A series goes in; segment boxes at every level of its
+      tree come out. Essence, Sentinel and Foresight will run on the same shards.
+  - name: Usage
+    description: What you used and what it cost.
+paths:
+  /v1/whoami:
+    get:
+      operationId: whoami
+      summary: The key and its account
+      tags: [Account]
+      x-status: available
+      responses:
+        "200":
+          description: The calling key.
+          headers:
+            request-id: { $ref: "#/components/headers/RequestId" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KeyIdentity" }
+              example:
+                object: key
+                id: key_01JBX4Q8M2
+                kind: live
+                name: ingest-prod
+                scopes: [segment:run, segment:read, series:write, stream:write, stream:read]
+                account: acct_01JBX3ZK7T
+                tier: start
+                expires_at: "2027-01-28T00:00:00Z"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/segmentations:
+    post:
+      operationId: segmentSeries
+      summary: Segment a finished series in one call
+      description: |
+        Send a finished series as bars (or samples, which the service turns into bars).
+        Back come the segment boxes at every level, parents before children, with the open
+        right edge marked `provisional`. For more than 5 MB of body use an upload and a job.
+
+        A test key accepts only `{"demo": "walk"}` or `{"demo": "sensor"}` and is never billed.
+      tags: [Delve]
+      x-status: available
+      parameters:
+        - $ref: "#/components/parameters/ContentSha256"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SegmentationRequest" }
+            examples:
+              bars:
+                summary: Hourly bars
+                value:
+                  series: exu/7f3a9c/1b02e4/export-kw
+                  profile: standard
+                  bars:
+                    - [1730246400000, 1730249999000, 412.0, 430.5, 405.2, 428.1]
+                    - [1730250000000, 1730253599000, 428.1, 441.0, 420.3, 436.7]
+              samples:
+                summary: Raw samples, times of your own
+                value:
+                  series: exu/7f3a9c/1b02e4/export-kw
+                  samples: [[1730246400000, 412.0], [1730246700000, 415.3], [1730247300000, 409.8]]
+              demo:
+                summary: Demonstration series, for test keys
+                value: { demo: walk }
+      responses:
+        "200":
+          description: The series' tree as segment boxes.
+          headers:
+            request-id: { $ref: "#/components/headers/RequestId" }
+            ratelimit-policy: { $ref: "#/components/headers/RateLimitPolicy" }
+            ratelimit: { $ref: "#/components/headers/RateLimit" }
+            server-timing: { $ref: "#/components/headers/ServerTiming" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Segmentation" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/IdempotencyConflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Overloaded" }
+      security:
+        - bearer: [segment:run]
+        - apiKey: [segment:run]
+
+  /v1/uploads:
+    post:
+      operationId: createUpload
+      summary: Get a presigned form for a large series file
+      description: |
+        Returns a form to POST one CSV or JSON Lines file straight to storage. The declared
+        `size_bytes` counts against the day's upload allowance when the slot is issued, and
+        storage accepts no more than it.
+      tags: [Delve]
+      x-status: available
+      parameters:
+        - $ref: "#/components/parameters/ContentSha256"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UploadRequest" }
+            example: { format: jsonl, size_bytes: 48000000 }
+      responses:
+        "201":
+          description: The upload slot.
+          headers:
+            request-id: { $ref: "#/components/headers/RequestId" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Upload" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+      security:
+        - bearer: [series:write]
+        - apiKey: [series:write]
+
+  /v1/segmentations/jobs:
+    post:
+      operationId: createSegmentationJob
+      summary: Segment an uploaded file as a job
+      description: |
+        Answers 202 at once. Poll the job, or receive `segmentation.job.succeeded` or
+        `segmentation.job.failed` at your webhook (see `specs/asyncapi.yaml`).
+        A failed job is not charged.
+      tags: [Delve]
+      x-status: available
+      parameters:
+        - $ref: "#/components/parameters/ContentSha256"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JobRequest" }
+            example:
+              upload_id: upl_01JBX6V0QK
+              kind: bars
+              series: exu/7f3a9c/1b02e4/export-kw
+              webhook_url: https://hooks.example-monitoring.com/patternode
+      responses:
+        "202":
+          description: The job, queued.
+          headers:
+            request-id: { $ref: "#/components/headers/RequestId" }
+            location:
+              description: The job's URL.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+      security:
+        - bearer: [segment:run]
+        - apiKey: [segment:run]
+
+  /v1/segmentations/jobs/{job_id}:
+    get:
+      operationId: getSegmentationJob
+      summary: A job's status, and its result link when done
+      tags: [Delve]
+      x-status: available
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: { type: string, pattern: "^job_[0-9A-Za-z]+$" }
+      responses:
+        "200":
+          description: The job.
+          headers:
+            request-id: { $ref: "#/components/headers/RequestId" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+      security:
+        - bearer: [segment:read]
+        - apiKey: [segment:read]
+
+  /v1/streams:
+    get:
+      operationId: listStreams
+      summary: List open streams, with their right edges (export)
+      tags: [Delve]
+      x-status: preview
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
+        - { name: starting_after, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: A page of streams.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object, data, has_more]
+                properties:
+                  object: { const: list }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Stream" }
+                  has_more: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+      security:
+        - bearer: [stream:read]
+        - apiKey: [stream:read]
+    post:
+      operationId: openStream
+      summary: Open a forming series with its first observation
+      description: |
+        A forming series is sent one bar at a time, as it happens. Opening a stream returns
+        its `stream_id`; Patternode keeps a checkpoint of the open right edge for it and
+        nothing else. Appending every bar gives the same segments as sending them all to
+        `POST /v1/segmentations`.
+      tags: [Delve]
+      x-status: preview
+      parameters:
+        - $ref: "#/components/parameters/ContentSha256"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StreamOpenRequest" }
+            example:
+              series: exu/7f3a9c/1b02e4/export-kw
+              profile: standard
+              bar: [1730246400000, 1730249999000, 412.0, 430.5, 405.2, 428.1]
+      responses:
+        "201":
+          description: The stream, with the outcome of its first bar.
+          headers:
+            request-id: { $ref: "#/components/headers/RequestId" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Appended" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+      security:
+        - bearer: [stream:write]
+        - apiKey: [stream:write]
+
+  /v1/streams/observations:
+    post:
+      operationId: appendObservationsBatch
+      summary: Append bars to many streams in one request
+      description: |
+        Up to 1,000 bars across any number of open streams. Each item is applied as a single
+        append would be, by stream and sequence, and answered in the same position. One item
+        failing does not fail the others: check each result's `status`.
+      tags: [Delve]
+      x-status: preview
+      parameters:
+        - $ref: "#/components/parameters/ContentSha256"
+        - $ref: "#/components/parameters/Traceparent"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [observations]
+              properties:
+                time_unit: { $ref: "#/components/schemas/TimeUnit" }
+                observations:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items:
+                    type: object
+                    required: [stream_id, sequence, bar]
+                    properties:
+                      stream_id: { type: string }
+                      sequence: { $ref: "#/components/schemas/Sequence" }
+                      bar: { $ref: "#/components/schemas/Bar" }
+            example:
+              observations:
+                - { stream_id: str_01JBXA, sequence: 42, bar: [1730250000000, 1730253599000, 428.1, 441.0, 420.3, 436.7] }
+                - { stream_id: str_01JBXB, sequence: 7, bar: [1730250000000, 1730253599000, 51.2, 52.0, 50.9, 51.7] }
+      responses:
+        "200":
+          description: One result per observation, in order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object, results]
+                properties:
+                  object: { const: observation_batch_result }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [status]
+                      properties:
+                        status: { type: integer, description: The HTTP status this append would have had alone. }
+                        result: { $ref: "#/components/schemas/Appended" }
+                        error: { $ref: "#/components/schemas/Error" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+      security:
+        - bearer: [stream:write]
+        - apiKey: [stream:write]
+
+  /v1/streams/{stream_id}/observations:
+    post:
+      operationId: appendObservation
+      summary: Append one bar to a forming series
+      description: |
+        Returns whether the bar `extended` the open segment at every level or `segmented`
+        one or more levels, with the events in order and the right edge as it now stands.
+        Bars must arrive in time order; an out-of-order bar is refused with 409 and leaves
+        the stream unchanged, so the caller can resend in order.
+      tags: [Delve]
+      x-status: preview
+      parameters:
+        - $ref: "#/components/parameters/StreamId"
+        - $ref: "#/components/parameters/ContentSha256"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/Traceparent"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ObservationRequest" }
+            example:
+              sequence: 2
+              bar: [1730250000000, 1730253599000, 428.1, 441.0, 420.3, 436.7]
+      responses:
+        "200":
+          description: The outcome of the bar.
+          headers:
+            request-id: { $ref: "#/components/headers/RequestId" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Appended" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/OutOfOrder" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+      security:
+        - bearer: [stream:write]
+        - apiKey: [stream:write]
+
+  /v1/streams/{stream_id}:
+    get:
+      operationId: getStream
+      summary: A stream's right edge
+      tags: [Delve]
+      x-status: preview
+      parameters:
+        - $ref: "#/components/parameters/StreamId"
+      responses:
+        "200":
+          description: The stream.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Stream" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+      security:
+        - bearer: [stream:read]
+        - apiKey: [stream:read]
+    delete:
+      operationId: closeStream
+      summary: Close a stream and delete its checkpoint
+      tags: [Delve]
+      x-status: preview
+      parameters:
+        - $ref: "#/components/parameters/StreamId"
+      responses:
+        "204": { description: Closed. The checkpoint is deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+      security:
+        - bearer: [stream:write]
+        - apiKey: [stream:write]
+
+  /v1/keys:
+    get:
+      operationId: listKeys
+      summary: List the account's keys
+      tags: [Account]
+      x-status: available
+      responses:
+        "200":
+          description: The keys, never their secrets.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object, data]
+                properties:
+                  object: { const: list }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Key" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+      security:
+        - bearer: [keys:manage]
+        - apiKey: [keys:manage]
+    post:
+      operationId: createKey
+      summary: Create a key
+      description: |
+        The response is the only time the key is shown. Store it in your secret store
+        before doing anything else. Expiry is fixed at creation. An account holds at most
+        five active keys of each kind.
+      tags: [Account]
+      x-status: available
+      parameters:
+        - $ref: "#/components/parameters/ContentSha256"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KeyRequest" }
+            example:
+              kind: live
+              name: ingest-prod
+              scopes: full
+              expires_in_days: 90
+              limits: { monthly_usd: 200, requests_per_minute: 120 }
+      responses:
+        "201":
+          description: The key, shown once.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedKey" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+      security:
+        - bearer: [keys:manage]
+        - apiKey: [keys:manage]
+
+  /v1/keys/{key_id}/disable:
+    post:
+      operationId: disableKey
+      summary: Disable a key (reversible)
+      tags: [Account]
+      x-status: available
+      parameters:
+        - $ref: "#/components/parameters/KeyId"
+        - $ref: "#/components/parameters/ContentSha256"
+      responses:
+        "200":
+          description: The key, disabled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Key" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+      security:
+        - bearer: [keys:manage]
+        - apiKey: [keys:manage]
+
+  /v1/keys/{key_id}/enable:
+    post:
+      operationId: enableKey
+      summary: Enable a disabled key
+      tags: [Account]
+      x-status: available
+      parameters:
+        - $ref: "#/components/parameters/KeyId"
+        - $ref: "#/components/parameters/ContentSha256"
+      responses:
+        "200":
+          description: The key, active.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Key" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+      security:
+        - bearer: [keys:manage]
+        - apiKey: [keys:manage]
+
+  /v1/keys/{key_id}:
+    delete:
+      operationId: deleteKey
+      summary: Delete a key (permanent)
+      description: A key cannot delete itself. Use another admin key.
+      tags: [Account]
+      x-status: available
+      parameters:
+        - $ref: "#/components/parameters/KeyId"
+      responses:
+        "200":
+          description: The key, deleted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Key" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+      security:
+        - bearer: [keys:manage]
+        - apiKey: [keys:manage]
+
+  /v1/account:
+    get:
+      operationId: getAccount
+      summary: Balance, tier, limits and webhook URL
+      tags: [Account]
+      x-status: available
+      responses:
+        "200":
+          description: The account.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+      security:
+        - bearer: [usage:read]
+        - apiKey: [usage:read]
+    patch:
+      operationId: updateAccount
+      summary: Set the spend limit, auto-reload or webhook URL
+      tags: [Account]
+      x-status: available
+      parameters:
+        - $ref: "#/components/parameters/ContentSha256"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AccountUpdate" }
+            example:
+              webhook_url: https://hooks.example-monitoring.com/patternode
+              spend_limit_usd: 500
+      responses:
+        "200":
+          description: The account.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+      security:
+        - bearer: [keys:manage]
+        - apiKey: [keys:manage]
+
+  /v1/account/webhook_secret:
+    post:
+      operationId: rotateWebhookSecret
+      summary: Issue a new webhook signing secret
+      description: |
+        Shown once. Deliveries are signed with the new and the previous secret until the
+        next rotation, so a receiver can switch without dropping a delivery.
+      tags: [Account]
+      x-status: available
+      parameters:
+        - $ref: "#/components/parameters/ContentSha256"
+      responses:
+        "201":
+          description: The new secret.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object, secret]
+                properties:
+                  object: { const: webhook_secret }
+                  secret: { type: string, pattern: "^whsec_[A-Za-z0-9+/=]+$" }
+                  note: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+      security:
+        - bearer: [keys:manage]
+        - apiKey: [keys:manage]
+
+  /v1/usage_report:
+    get:
+      operationId: getUsageReport
+      summary: Usage by key and kind, hourly or daily
+      tags: [Usage]
+      x-status: available
+      parameters:
+        - { name: starting_at, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: ending_at, in: query, schema: { type: string, format: date-time } }
+        - { name: bucket_width, in: query, schema: { type: string, enum: [1h, 1d], default: 1d } }
+      responses:
+        "200":
+          description: The report.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsageReport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+      security:
+        - bearer: [usage:read]
+        - apiKey: [usage:read]
+
+  /v1/service_levels:
+    get:
+      operationId: getServiceLevels
+      summary: Your service level indicators, as Patternode measures them
+      tags: [Account]
+      x-status: planned
+      parameters:
+        - { name: month, in: query, schema: { type: string, pattern: "^[0-9]{4}-[0-9]{2}$" } }
+      responses:
+        "200":
+          description: Indicators per jurisdiction and transport.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object: { const: service_levels }
+                  plan: { type: string, enum: [evaluation, production, mission_critical, dedicated] }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        month: { type: string }
+                        jurisdiction: { type: string, enum: [anz, eu, us] }
+                        transport: { type: string, enum: [rest, grpc, websocket, webhook, event_bus] }
+                        availability: { type: number }
+                        latency_ms: { type: object, properties: { p50: { type: number }, p99: { type: number }, p999: { type: number } } }
+                        error_budget_remaining: { type: number }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+      security:
+        - bearer: [usage:read]
+        - apiKey: [usage:read]
+
+  /v1/audit_events:
+    get:
+      operationId: listAuditEvents
+      summary: Every change to the account and its keys, and every support access
+      tags: [Account]
+      x-status: planned
+      parameters:
+        - { name: starting_at, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, maximum: 1000, default: 100 } }
+        - { name: starting_after, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: A page of audit events, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object: { const: list }
+                  has_more: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, type, actor, created_at]
+                      properties:
+                        id: { type: string }
+                        type: { type: string, examples: [key.created, key.disabled, webhook_secret.rotated, support.accessed] }
+                        actor: { type: string, description: "A key id, a person at your organisation, or Patternode support." }
+                        source_ip: { type: string }
+                        request_id: { type: string }
+                        created_at: { type: string, format: date-time }
+                        details: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+      security:
+        - bearer: [keys:manage]
+        - apiKey: [keys:manage]
+
+  /oauth/token:
+    post:
+      operationId: issueToken
+      summary: OAuth 2.0 client credentials with private_key_jwt (Mission Critical, Dedicated)
+      description: |
+        RFC 6749 client credentials, the client authenticated by a JWT it signs (RFC 7523)
+        with a key registered to it. Optionally bound to a client certificate (RFC 8705). The
+        access token is valid for 15 minutes and is sent as a Bearer token like a key.
+      tags: [Account]
+      x-status: planned
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type, client_assertion_type, client_assertion]
+              properties:
+                grant_type: { const: client_credentials }
+                client_assertion_type: { const: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" }
+                client_assertion: { type: string }
+                scope: { type: string, examples: ["segment:run stream:write"] }
+      responses:
+        "200":
+          description: The token.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_in]
+                properties:
+                  access_token: { type: string }
+                  token_type: { const: Bearer }
+                  expires_in: { type: integer, examples: [900] }
+                  scope: { type: string }
+        "400":
+          description: RFC 6749 error.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  error_description: { type: string }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: "`Authorization: Bearer pnk_live_...`, one space after Bearer."
+    apiKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: The same key in `x-api-key`, for clients that cannot set Authorization.
+
+  parameters:
+    ContentSha256:
+      name: x-amz-content-sha256
+      in: header
+      required: true
+      description: |
+        SHA-256 of the exact body bytes, lowercase hex. With no body, the hash of the empty
+        string. Required on every POST, PUT and PATCH to /v1/.
+      schema: { type: string, pattern: "^[0-9a-f]{64}$" }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Any unique string. Stored 24 hours; a reused key with a different body is 422.
+      schema: { type: string, maxLength: 255 }
+    Traceparent:
+      name: traceparent
+      in: header
+      required: false
+      description: W3C Trace Context. Patternode continues your trace and reports its time in `server-timing`.
+      schema: { type: string }
+    StreamId:
+      name: stream_id
+      in: path
+      required: true
+      schema: { type: string, pattern: "^str_[0-9A-Za-z]+$" }
+    KeyId:
+      name: key_id
+      in: path
+      required: true
+      schema: { type: string, pattern: "^key_[0-9A-Za-z]+$" }
+
+  headers:
+    RequestId:
+      description: Quote it to support.
+      schema: { type: string }
+    RateLimitPolicy:
+      description: IETF RateLimit-Policy (draft-ietf-httpapi-ratelimit-headers).
+      schema: { type: string }
+    RateLimit:
+      description: IETF RateLimit, the current window's remaining allowance.
+      schema: { type: string }
+    ServerTiming:
+      description: Patternode's share of the request's time, W3C Server-Timing.
+      schema: { type: string }
+    RetryAfter:
+      description: Seconds to wait before retrying.
+      schema: { type: integer }
+
+  responses:
+    InvalidRequest:
+      description: The request or series cannot be used.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            type: error
+            error:
+              type: invalid_request_error
+              message: "Times must increase: bar 3 opens before bar 2 closes."
+              details:
+                error_code: invalid_series
+                problems: [{ index: 3, problem: times_not_increasing }]
+            request_id: req_01JBX7A2C9
+    Unauthorized:
+      description: Missing, bad, disabled or expired key.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    PaymentRequired:
+      description: No credit.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Missing scope, a test key on real data, or terms not accepted.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such resource in this account.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    OutOfOrder:
+      description: |
+        `out_of_order`: the bar opens before the stream's last bar closed. `sequence_gap`: the
+        sequence skips one; `details.expected_sequence` says which to send. The stream is unchanged.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    IdempotencyConflict:
+      description: The Idempotency-Key was used with a different body.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: A rate, quota or spend limit. Wait for retry-after.
+      headers:
+        retry-after: { $ref: "#/components/headers/RetryAfter" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Overloaded:
+      description: Service capacity for the day. Retry later.
+      headers:
+        retry-after: { $ref: "#/components/headers/RetryAfter" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Bar:
+      $ref: "./schemas/bar.schema.json"
+    Sample:
+      $ref: "./schemas/sample.schema.json"
+    SegmentBox:
+      $ref: "./schemas/segment-box.schema.json"
+    SeriesEvent:
+      $ref: "./schemas/series-event.schema.json"
+    Error:
+      $ref: "./schemas/error.schema.json"
+
+    SeriesName:
+      type: string
+      minLength: 1
+      maxLength: 200
+      description: |
+        A name you make up for the series. Patternode stores nothing else about it, so make
+        it opaque: a hash of your client and asset, not their names.
+      examples: [exu/7f3a9c/1b02e4/export-kw]
+
+    Profile:
+      type: string
+      default: standard
+      pattern: "^[a-z][a-z0-9-]*(@[0-9]{4}-[0-9]{2})?$"
+      description: |
+        The segmentation profile, optionally pinned to a version: `standard` or
+        `standard@2026-11`. Unpinned, the version current at the call (or when the stream
+        opened) is used, and the answer names it. Versions never change and are served for
+        at least 24 months. Your onboarding pack names the profiles for your account.
+      examples: [standard, standard@2026-11]
+
+    TimeUnit:
+      type: string
+      enum: [ms, us, ns]
+      default: ms
+      description: |
+        The unit of every time in the request and the answer, since the Unix epoch, UTC.
+        In JSON, `us` and `ns` times are strings of digits; `ms` times are integers.
+
+    Sequence:
+      type: integer
+      format: int64
+      minimum: 1
+      description: |
+        The bar's position in its stream, assigned by you: 1 for the first bar, then one
+        more each time. A repeated sequence returns the original answer and applies nothing;
+        a skipped one is refused with 409 `sequence_gap`.
+
+    SegmentationRequest:
+      oneOf:
+        - type: object
+          required: [series, bars]
+          properties:
+            series: { $ref: "#/components/schemas/SeriesName" }
+            profile: { $ref: "#/components/schemas/Profile" }
+            time_unit: { $ref: "#/components/schemas/TimeUnit" }
+            bars:
+              type: array
+              minItems: 2
+              items: { $ref: "#/components/schemas/Bar" }
+          additionalProperties: false
+        - type: object
+          required: [series, samples]
+          properties:
+            series: { $ref: "#/components/schemas/SeriesName" }
+            profile: { $ref: "#/components/schemas/Profile" }
+            time_unit: { $ref: "#/components/schemas/TimeUnit" }
+            samples:
+              type: array
+              minItems: 2
+              items: { $ref: "#/components/schemas/Sample" }
+          additionalProperties: false
+        - type: object
+          required: [demo]
+          properties:
+            demo: { type: string, enum: [walk, sensor] }
+          additionalProperties: false
+
+    Segmentation:
+      type: object
+      required: [object, id, series, bars, depth, segments, usage]
+      properties:
+        object: { const: segmentation }
+        id: { type: string, pattern: "^seg_[0-9A-Za-z]+$" }
+        series: { type: string }
+        profile_version:
+          type: string
+          description: The profile version used. The same bars with the same version give the same segments, always.
+          examples: ["standard@2026-11"]
+        time_unit: { $ref: "#/components/schemas/TimeUnit" }
+        bars: { type: integer, description: Bars the series had after any samples were turned into bars. }
+        depth: { type: integer, description: Levels above the bars. }
+        segments:
+          type: array
+          description: Every segment above the bars, parent before child.
+          items: { $ref: "#/components/schemas/SegmentBox" }
+        usage: { $ref: "#/components/schemas/RunUsage" }
+
+    RunUsage:
+      type: object
+      required: [samples_billed, cost_usd]
+      properties:
+        samples_billed: { type: integer }
+        cost_usd: { type: number }
+
+    UploadRequest:
+      type: object
+      required: [format]
+      properties:
+        format: { type: string, enum: [csv, jsonl] }
+        size_bytes: { type: integer, minimum: 1 }
+
+    Upload:
+      type: object
+      required: [object, id, url, fields, expires_at]
+      properties:
+        object: { const: upload }
+        id: { type: string, pattern: "^upl_[0-9A-Za-z]+$" }
+        url: { type: string, format: uri, description: POST the file here as multipart/form-data. }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+          description: Form fields to send before the file, unchanged.
+        max_bytes: { type: integer }
+        expires_at: { type: string, format: date-time }
+
+    JobRequest:
+      type: object
+      required: [upload_id, kind, series]
+      properties:
+        upload_id: { type: string }
+        kind: { type: string, enum: [bars, samples] }
+        series: { $ref: "#/components/schemas/SeriesName" }
+        profile: { $ref: "#/components/schemas/Profile" }
+        webhook_url:
+          type: string
+          format: uri
+          pattern: "^https://"
+          description: Overrides the account's webhook URL for this job.
+
+    Job:
+      type: object
+      required: [object, id, status, created_at]
+      properties:
+        object: { const: segmentation_job }
+        id: { type: string, pattern: "^job_[0-9A-Za-z]+$" }
+        status: { type: string, enum: [queued, running, succeeded, failed] }
+        series: { type: string }
+        created_at: { type: string, format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+        result_url:
+          type: [string, "null"]
+          format: uri
+          description: When succeeded, a link to the Segmentation as JSON, valid 24 hours.
+        usage: { $ref: "#/components/schemas/RunUsage" }
+        error:
+          oneOf:
+            - type: "null"
+            - $ref: "./schemas/error.schema.json#/properties/error"
+
+    StreamOpenRequest:
+      type: object
+      required: [series, bar]
+      properties:
+        series: { $ref: "#/components/schemas/SeriesName" }
+        profile: { $ref: "#/components/schemas/Profile" }
+        time_unit: { $ref: "#/components/schemas/TimeUnit" }
+        bar:
+          $ref: "#/components/schemas/Bar"
+          description: The first bar. It is sequence 1.
+      additionalProperties: false
+
+    ObservationRequest:
+      type: object
+      required: [sequence, bar]
+      properties:
+        sequence: { $ref: "#/components/schemas/Sequence" }
+        time_unit: { $ref: "#/components/schemas/TimeUnit" }
+        bar: { $ref: "#/components/schemas/Bar" }
+      additionalProperties: false
+
+    Appended:
+      type: object
+      required: [object, stream_id, series, bars, outcome, events, right_edge]
+      properties:
+        object: { const: observation_result }
+        stream_id: { type: string, pattern: "^str_[0-9A-Za-z]+$" }
+        series: { type: string }
+        sequence: { $ref: "#/components/schemas/Sequence" }
+        profile_version: { type: string, examples: ["standard@2026-11"] }
+        bars: { type: integer, description: Bars in the stream after this one. }
+        outcome:
+          type: string
+          enum: [started, extended, segmented]
+          description: |
+            `started` for the first two bars of a stream, `segmented` when any level closed a
+            segment and opened another, `extended` otherwise.
+        events:
+          type: array
+          description: What this bar did at each level, from the bottom up.
+          items: { $ref: "#/components/schemas/SeriesEvent" }
+        right_edge:
+          type: array
+          description: The open segment at each level, all provisional, bottom up.
+          items: { $ref: "#/components/schemas/SegmentBox" }
+
+    Stream:
+      type: object
+      required: [object, id, series, bars, right_edge, created_at]
+      properties:
+        object: { const: stream }
+        id: { type: string }
+        series: { type: string }
+        profile_version: { type: string }
+        last_sequence: { $ref: "#/components/schemas/Sequence" }
+        bars: { type: integer }
+        right_edge:
+          type: array
+          items: { $ref: "#/components/schemas/SegmentBox" }
+        created_at: { type: string, format: date-time }
+        last_bar_at: { type: [string, "null"], format: date-time }
+
+    KeyIdentity:
+      type: object
+      required: [object, id, kind, scopes, account, tier]
+      properties:
+        object: { const: key }
+        id: { type: string }
+        kind: { type: string, enum: [live, test, admin] }
+        name: { type: [string, "null"] }
+        scopes:
+          type: array
+          items: { $ref: "#/components/schemas/Scope" }
+        account: { type: string }
+        tier: { type: string }
+        expires_at: { type: [string, "null"], format: date-time }
+
+    Scope:
+      type: string
+      enum:
+        - segment:run
+        - segment:read
+        - series:write
+        - stream:write
+        - stream:read
+        - usage:read
+        - keys:manage
+        - billing:manage
+
+    KeyRequest:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [live, test, admin] }
+        name: { type: string, maxLength: 64 }
+        scopes:
+          description: |
+            A preset (`full`, `read-only`, `stream-only`, `admin`) or a list of scopes. Admin
+            keys hold only admin scopes; live and test keys hold none of them.
+          oneOf:
+            - type: string
+              enum: [full, read-only, stream-only, admin]
+            - type: array
+              items: { $ref: "#/components/schemas/Scope" }
+        expires_in_days: { type: integer, enum: [1, 7, 30, 90] }
+        expires_at: { type: string, format: date-time }
+        never_expires: { type: boolean, default: false }
+        limits:
+          type: object
+          properties:
+            monthly_usd: { type: number, minimum: 0 }
+            requests_per_minute: { type: integer, minimum: 1 }
+
+    Key:
+      type: object
+      required: [object, id, kind, status, scopes, created_at]
+      properties:
+        object: { const: api_key }
+        id: { type: string }
+        kind: { type: string, enum: [live, test, admin] }
+        name: { type: [string, "null"] }
+        status: { type: string, enum: [active, disabled, deleted] }
+        scopes:
+          type: array
+          items: { $ref: "#/components/schemas/Scope" }
+        hint: { type: string, description: "The key's last four characters, e.g. `...9fQ2`." }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: [string, "null"], format: date-time }
+        last_used_at: { type: [string, "null"], format: date-time }
+        limits:
+          type: object
+          properties:
+            monthly_usd: { type: number }
+            requests_per_minute: { type: integer }
+
+    CreatedKey:
+      allOf:
+        - $ref: "#/components/schemas/Key"
+        - type: object
+          required: [key]
+          properties:
+            key:
+              type: string
+              pattern: "^pnk_(live|test|admin)_[0-9A-Za-z]{36}$"
+              description: The secret. Shown only in this response.
+            note: { type: string }
+
+    Account:
+      type: object
+      required: [object, id, tier, balance_usd]
+      properties:
+        object: { const: account }
+        id: { type: string }
+        tier: { type: string }
+        balance_usd: { type: number }
+        spend_limit_usd: { type: [number, "null"] }
+        auto_reload:
+          type: [object, "null"]
+          properties:
+            threshold_usd: { type: number }
+            amount_usd: { type: number }
+            monthly_limit_usd: { type: number }
+        webhook_url: { type: [string, "null"], format: uri }
+        terms_accepted_at: { type: [string, "null"], format: date-time }
+
+    AccountUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        spend_limit_usd: { type: [number, "null"], minimum: 0 }
+        auto_reload:
+          type: [object, "null"]
+          properties:
+            threshold_usd: { type: number }
+            amount_usd: { type: number }
+            monthly_limit_usd: { type: number }
+        webhook_url:
+          type: [string, "null"]
+          format: uri
+          pattern: "^https://"
+      additionalProperties: false
+
+    UsageReport:
+      type: object
+      required: [object, data]
+      properties:
+        object: { const: usage_report }
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              starting_at: { type: string, format: date-time }
+              key_id: { type: string }
+              kind: { type: string, enum: [segment, job, stream, demo] }
+              requests: { type: integer }
+              samples: { type: integer }
+              cost_usd: { type: number }

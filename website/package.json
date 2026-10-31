@@ -1,0 +1,57 @@
+{
+  "name": "patternode-developers-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "developers.patternode.com, built with Docusaurus from the specs, docs and examples in this repository.",
+  "scripts": {
+    "gen": "npm run gen:api && npm run gen:events",
+    "gen:api": "docusaurus gen-api-docs all",
+    "gen:events": "node scripts/events-from-asyncapi.mjs",
+    "start": "npm run gen && docusaurus start",
+    "build": "npm run gen && docusaurus build",
+    "serve": "docusaurus serve",
+    "clear": "docusaurus clean-api-docs all && docusaurus clear"
+  },
+  "dependencies": {
+    "@docusaurus/core": "3.10.2",
+    "@docusaurus/faster": "^3.10.2",
+    "@docusaurus/preset-classic": "3.10.2",
+    "@docusaurus/theme-mermaid": "3.10.2",
+    "@easyops-cn/docusaurus-search-local": "^0.55.3",
+    "@fontsource/ibm-plex-mono": "^5.2.0",
+    "@fontsource/ibm-plex-sans": "^5.2.0",
+    "@mdx-js/react": "^3.1.0",
+    "clsx": "^2.1.1",
+    "docusaurus-plugin-llms": "^0.6.1",
+    "docusaurus-plugin-openapi-docs": "^5.2.0",
+    "docusaurus-plugin-sass": "^0.2.6",
+    "docusaurus-theme-openapi-docs": "^5.2.0",
+    "prism-react-renderer": "^2.4.1",
+    "raw-loader": "^4.0.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sass": "^1.80.0",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@docusaurus/module-type-aliases": "3.10.2",
+    "@docusaurus/tsconfig": "3.10.2",
+    "@docusaurus/types": "3.10.2",
+    "typescript": "~5.6.0"
+  },
+  "engines": {
+    "node": ">=20.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.5%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 3 chrome version",
+      "last 3 firefox version",
+      "last 5 safari version"
+    ]
+  }
+}

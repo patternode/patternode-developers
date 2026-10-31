@@ -1,0 +1,10 @@
+node_modules/
+__pycache__/
+*.pyc
+out/
+.terraform/
+*.tfstate*
+terraform/**/.build/
+*.tfvars
+!terraform/**/examples.tfvars
+.env

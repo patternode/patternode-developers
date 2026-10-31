@@ -1,0 +1,7 @@
+node_modules/
+build/
+.docusaurus/
+.cache-loader/
+# Generated from ../specs by `npm run gen`
+docs/api/
+docs/events/

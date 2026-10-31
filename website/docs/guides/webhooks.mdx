@@ -1,0 +1,39 @@
+---
+title: Receiving webhooks
+sidebar_position: 5
+description: Verify the Standard Webhooks signature, deduplicate, answer at once, then work.
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import CodeBlock from '@theme/CodeBlock';
+import py from '!!raw-loader!@examples/python/webhook_receiver.py';
+import ts from '!!raw-loader!@examples/typescript/src/webhooks.ts';
+import lambda from '!!raw-loader!@terraform/aws/delve-partner/lambda/receiver.py';
+
+# Receiving webhooks
+
+Patternode signs every delivery to the [Standard Webhooks](https://www.standardwebhooks.com) specification. The event types are on [Events](../events/index.md).
+
+1. Set your endpoint: `PATCH /v1/account {"webhook_url": "https://..."}`. HTTPS only.
+2. Get the secret: `POST /v1/account/webhook_secret`. Shown once; put it in your secret store.
+3. On each delivery:
+   1. Verify the signature over `webhook-id.webhook-timestamp.body`, using the raw body bytes, before parsing.
+   2. Reject a timestamp more than 5 minutes from your clock.
+   3. Drop a `webhook-id` you have seen. Retries carry the same id.
+   4. Answer 2xx within 10 seconds, then do the work from a queue.
+   5. Ignore event types you do not know.
+
+During a secret rotation a delivery carries two signatures, space separated. Accept either.
+
+<Tabs groupId="language">
+  <TabItem value="python" label="Python">
+    <CodeBlock language="python" title="examples/python/webhook_receiver.py">{py}</CodeBlock>
+  </TabItem>
+  <TabItem value="typescript" label="TypeScript">
+    <CodeBlock language="ts" title="examples/typescript/src/webhooks.ts">{ts}</CodeBlock>
+  </TabItem>
+  <TabItem value="lambda" label="AWS Lambda">
+    <CodeBlock language="python" title="terraform/aws/delve-partner/lambda/receiver.py">{lambda}</CodeBlock>
+  </TabItem>
+</Tabs>

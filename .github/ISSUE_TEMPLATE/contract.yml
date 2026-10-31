@@ -1,0 +1,19 @@
+name: A question or proposal about the API contract
+description: Something in specs/ is ambiguous, inconsistent, or missing for your integration.
+labels: [contract]
+body:
+  - type: markdown
+    attributes:
+      value: Never paste an API key, a real series or anything confidential here. This repository is public.
+  - type: input
+    id: operation
+    attributes:
+      label: Operation, event or schema
+      placeholder: POST /v1/streams/{stream_id}/observations, or stream.segmented
+    validations: { required: true }
+  - type: textarea
+    id: question
+    attributes:
+      label: The question or the proposal
+      description: What you need, and why: the integration pattern and the industry, without naming your customer.
+    validations: { required: true }

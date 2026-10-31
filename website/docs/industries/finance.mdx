@@ -1,0 +1,64 @@
+---
+title: Finance
+sidebar_position: 2
+description: Trades, quotes and bars into Delve, for quantitative research, backtests and live trading.
+---
+
+import CodeBlock from '@theme/CodeBlock';
+import src from '!!raw-loader!@examples/industries/finance/trades_to_delve.py';
+
+# Finance
+
+For quantitative research, backtesting and live trading across many instruments: equities, futures, foreign exchange, crypto and rates.
+
+## Your data, as Delve reads it
+
+| You have | Send | Notes |
+|---|---|---|
+| Trades with exchange or receive timestamps in nanoseconds | Bars built from trades, with `time_unit: "ns"` | Times are kept exactly as sent; JSON carries them as strings |
+| Vendor OHLC bars | The bars, as they are | Keep the vendor's bar boundaries |
+| Quotes | Bars of the mid, or of the bid and the ask as two series | |
+| A second, minute or session with no trade | Nothing: a gap | Never a flat filler bar |
+| Spreads or returns that cross zero | The series plus a fixed offset | Remove it when you use the segments |
+
+| Horizon | Bar width that usually fits |
+|---|---|
+| Intraday execution and signals | 1 second to 1 minute |
+| Swing and daily | 5 minutes to 1 hour |
+| Research across years | 1 day |
+
+## The plan for the job
+
+| Use | Plan |
+|---|---|
+| Research and backtests | Production, with jobs and Parquet or Arrow uploads |
+| Live signals feeding a trading system | Mission Critical, gRPC streams, callers in the jurisdiction's region or connected privately |
+| A fund at full scale, or one whose regulator treats Patternode as a critical ICT third party | Dedicated |
+
+Register your venues' trading hours as blackout periods, so Patternode changes nothing while you trade. Size capacity for the open and the close, when every instrument trades at once.
+
+## Backtest and live agree
+
+Pin the profile version (`standard@2026-11`). The same bars with the same version give the same segments, bit for bit, on every transport, region and day, for at least 24 months. So a backtest's segments are the segments you would have had live, and a model validated on them stays valid until you choose to move version.
+
+## Example
+
+`examples/industries/finance/trades_to_delve.py` reads invented trades for two instruments with nanosecond times, builds one-second bars (a second with no trade is a gap), backtests the day as a finished series and checks a second run is identical, then goes live, sending every instrument's new bar in one request as each second closes.
+
+```bash
+python mock/mock_patternode.py &
+PATTERNODE_API_KEY=pnk_live_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB python examples/industries/finance/trades_to_delve.py
+```
+
+<CodeBlock language="python" title="examples/industries/finance/trades_to_delve.py">{src}</CodeBlock>
+
+## What you will be asked
+
+| Question | Answer |
+|---|---|
+| Tail latency? | p99 10 ms on gRPC, Mission Critical, at the edge ([Service levels](../service/service-levels.md)) |
+| Timestamp precision? | Nanoseconds, untouched ([Time](../service/realtime.md#time)) |
+| Reproducible for model validation? | Yes, per profile version ([Determinism](../service/realtime.md#determinism)) |
+| Change during trading hours? | None, inside your blackout periods ([Change control](../service/resilience.md#change-control)) |
+| DORA and outsourcing terms? | In the order form, with an exit plan ([Compliance](../service/compliance.md)) |
+| Does Patternode see our positions or strategies? | No: only bars under names you choose ([Data boundary](../concepts/data-boundary.md)) |

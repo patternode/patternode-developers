@@ -1,0 +1,44 @@
+---
+title: Forming series
+sidebar_position: 3
+description: Append each bar as it closes and act on each segment as it closes. Preview.
+---
+
+import CodeBlock from '@theme/CodeBlock';
+import src from '!!raw-loader!@examples/python/forming_series.py';
+
+# Forming series
+
+:::info Preview
+These routes work and may change with 30 days' notice. Do not build production alarms on them yet.
+:::
+
+```mermaid
+sequenceDiagram
+  participant I as Your ingest workload
+  participant P as Patternode
+  participant S as Your store
+  I->>P: POST /v1/streams {series, bar}
+  P-->>I: stream_id, outcome: started
+  loop each bar as it closes
+    I->>P: POST /v1/streams/{id}/observations {bar}
+    P-->>I: outcome, events, right_edge
+    I->>S: Store closed segments; replace the right edge
+  end
+  I->>P: DELETE /v1/streams/{id} (when the series ends)
+```
+
+| `outcome` | Means | Do |
+|---|---|---|
+| `started` | The first two bars | Store the right edge |
+| `extended` | No level closed | Replace the right edge |
+| `segmented` | One or more levels closed a segment | Store each `node` of a `segmented` event as final; replace the right edge; redraw; notify |
+
+Rules:
+
+- One writer per stream. Send bars in order; a bar that opens before the last one closed is refused with 409 `out_of_order` and the stream is unchanged.
+- Keep `stream_id` with the series in your store. If you lose it, open a new stream and resend from the last final segment's close.
+- If an append times out, resend it with the same `Idempotency-Key`: it will not be applied twice.
+- Close streams you no longer need, which deletes their checkpoint.
+
+<CodeBlock language="python" title="examples/python/forming_series.py">{src}</CodeBlock>

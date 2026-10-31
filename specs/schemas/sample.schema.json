@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sample",
+  "description": "One reading: [time, value]. Time since the Unix epoch, UTC, in the request's time_unit, strictly increasing within a series. Value finite and above zero.",
+  "type": "array",
+  "prefixItems": [
+    {
+      "title": "time",
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]{1,20}$"
+        }
+      ]
+    },
+    {
+      "title": "value",
+      "type": "number",
+      "exclusiveMinimum": 0
+    }
+  ],
+  "minItems": 2,
+  "maxItems": 2,
+  "items": false,
+  "examples": [
+    [
+      1730246400000,
+      412.0
+    ]
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Bar",
+  "description": "One interval of a series: [open_time, close_time, open, high, low, close]. Times are integers since the Unix epoch, UTC, in the request's time_unit (ms by default); us and ns times are strings of digits in JSON. close_time >= open_time, high >= low, every value finite and above zero. Bars of a series must not overlap and must be in time order. Irregular spacing is fine: leave a gap where nothing happened rather than sending a flat bar.",
+  "type": "array",
+  "prefixItems": [
+    {
+      "title": "open_time",
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]{1,20}$"
+        }
+      ]
+    },
+    {
+      "title": "close_time",
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]{1,20}$"
+        }
+      ]
+    },
+    {
+      "title": "open",
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    {
+      "title": "high",
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    {
+      "title": "low",
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    {
+      "title": "close",
+      "type": "number",
+      "exclusiveMinimum": 0
+    }
+  ],
+  "minItems": 6,
+  "maxItems": 6,
+  "items": false,
+  "examples": [
+    [
+      1730246400000,
+      1730249999000,
+      412.0,
+      430.5,
+      405.2,
+      428.1
+    ]
+  ]
+}

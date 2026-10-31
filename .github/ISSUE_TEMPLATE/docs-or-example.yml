@@ -1,0 +1,25 @@
+name: A mistake in the docs or an example
+description: Something on the site or in examples/ is wrong, unclear or does not run.
+labels: [documentation]
+body:
+  - type: markdown
+    attributes:
+      value: Never paste an API key, a real series or anything confidential here. This repository is public.
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: The page address or the file path.
+      placeholder: https://developers.patternode.com/guides/forming-series or examples/python/bulk_job.py
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: What is wrong
+      description: What you expected, and what you found. For an example that fails, the command and its output.
+    validations: { required: true }
+  - type: dropdown
+    id: against
+    attributes:
+      label: Running against
+      options: [The mock, The real API, Not running anything]

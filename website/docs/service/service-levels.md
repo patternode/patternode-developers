@@ -1,0 +1,48 @@
+---
+title: Service levels
+sidebar_position: 2
+description: The service level objectives, how each is measured, the error budget and service credits.
+---
+
+# Service levels
+
+## Objectives
+
+| Indicator | Production | Mission Critical | Dedicated | Measured |
+|---|---|---|---|---|
+| Availability | 99.9% | 99.99% | 99.99% (99.995% by agreement) | Valid requests answered without a 5xx or a timeout, over all minutes of the calendar month, per jurisdiction |
+| Append latency, REST | p99 50 ms | p50 10 ms, p99 40 ms | By agreement | From the last byte received at Patternode's edge to the first byte of the answer |
+| Append latency, gRPC stream | | p50 2 ms, p99 10 ms, p99.9 25 ms | p99 5 ms, by agreement | From a message received to its acknowledgement on the stream, at the edge |
+| Finished series, inline | p99 2 s for up to 100,000 bars | p99 1 s for up to 100,000 bars | By agreement | Edge to edge |
+| Job start | p99 60 s | p99 15 s | p99 15 s | From 202 to `running` |
+| Job throughput | 10 million bars a minute per account | 50 million | Sized together | Bars processed across running jobs |
+| Event freshness, stream subscription | | p99 100 ms | p99 50 ms | From the append's acknowledgement to the event leaving the edge |
+| Event freshness, webhook | p99 30 s | p99 5 s | p99 5 s | From the event to the first delivery attempt |
+| Event delivery | At least once, retried for 24 hours | At least once, retried for 72 hours, replayable for 7 days | As Mission Critical | |
+| Durability of acknowledged appends | Replicated across three zones before the acknowledgement | The same, and replicated to the second region within 1 second | The same | |
+
+Latency is measured at the edge so that it excludes the network between you and Patternode, which is yours to choose: put your caller in the same cloud region as your jurisdiction's endpoint, or use private connectivity.
+
+## What counts as unavailable
+
+A minute is unavailable when more than 1% of valid requests in it fail with a 5xx, time out (30 seconds for REST, 5 seconds for a stream acknowledgement), or a stream is reset without a `GOAWAY` and its successor refuses to resume. These do not count: 4xx answers, including 429 within your plan's throughput; scheduled maintenance announced as the plan requires (none on Mission Critical and Dedicated, which are maintained without downtime); failures caused by your network or your cloud provider's network outside Patternode's edge; and preview or planned routes.
+
+## Your view of the indicators
+
+- `GET /v1/service_levels` returns your account's indicators for the current and the last 12 months, per jurisdiction, as Patternode measures them.
+- Every response carries `request-id` and, when you send W3C `traceparent`, continues your trace, so your own monitoring sees Patternode's share of each request's time in `server-timing`.
+- The status page, `status.patternode.com`, shows each jurisdiction and transport, with subscriptions by email, webhook and RSS.
+
+## Error budget and change
+
+Each month's error budget is what the availability objective allows: 43 minutes at 99.9%, 4 minutes 19 seconds at 99.99%. When a jurisdiction has spent its budget, Patternode MUST stop releasing to it anything but fixes until the budget recovers.
+
+## Service credits
+
+| Monthly availability | Production | Mission Critical, Dedicated |
+|---|---|---|
+| Below the objective | 10% of the month's fees | 10% |
+| Below 99.0% (Production) or 99.9% (Mission Critical) | 25% | 25% |
+| Below 95.0% (Production) or 99.0% (Mission Critical) | 50% | 50% |
+
+Credits are claimed within 30 days of the month's end, by a technical contact, with the request ids or times affected. The order form may agree others.

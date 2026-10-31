@@ -1,0 +1,8 @@
+extends:
+  - recommended
+rules:
+  operation-4xx-response: error
+  no-server-example.com: off
+  no-server-variables-empty-enum: off
+  info-license-url: off
+  security-defined: error

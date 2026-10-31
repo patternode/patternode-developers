@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Event",
+  "description": "The body of every webhook delivery. Signed to the Standard Webhooks specification (headers webhook-id, webhook-timestamp, webhook-signature). The same webhook-id on every retry: deduplicate on it.",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "data"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable across retries and channels. Deduplicate on it."
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "segmentation.job.succeeded",
+        "segmentation.job.failed",
+        "stream.segmented",
+        "key.expiring",
+        "account.balance_low",
+        "audit.key_created",
+        "audit.key_disabled",
+        "audit.support_accessed"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "data": {
+      "type": "object",
+      "description": "The resource the event is about: a Job, a stream result, a Key or the Account."
+    },
+    "sequence": {
+      "type": "integer",
+      "description": "Stream events only."
+    }
+  }
+}

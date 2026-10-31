@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Error",
+  "description": "Every error from /v1/ has this shape. Branch on error.details.error_code, never on the message.",
+  "type": "object",
+  "required": [
+    "type",
+    "error",
+    "request_id"
+  ],
+  "properties": {
+    "type": {
+      "const": "error"
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "type",
+        "message",
+        "details"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "invalid_request_error",
+            "authentication_error",
+            "permission_error",
+            "not_found_error",
+            "conflict_error",
+            "billing_error",
+            "rate_limit_error",
+            "overloaded_error",
+            "api_error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "description": "For people. May change."
+        },
+        "details": {
+          "type": "object",
+          "required": [
+            "error_code"
+          ],
+          "properties": {
+            "error_code": {
+              "type": "string",
+              "enum": [
+                "invalid_series",
+                "body_too_large",
+                "missing_content_sha256",
+                "missing_api_key",
+                "invalid_api_key",
+                "key_disabled",
+                "key_expired",
+                "missing_scope",
+                "test_key_demo_only",
+                "terms_not_accepted",
+                "not_found",
+                "out_of_order",
+                "idempotency_conflict",
+                "too_many_keys",
+                "credit_balance_too_low",
+                "rate_limited",
+                "upload_quota_reached",
+                "enforced_spend_limit_reached",
+                "customer_spend_limit_reached",
+                "service_capacity",
+                "internal",
+                "sequence_gap",
+                "invalid_content_sha256"
+              ]
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "index": {
+                    "type": "integer"
+                  },
+                  "problem": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "expected_sequence": {
+              "type": "integer",
+              "description": "With sequence_gap: the sequence to send next."
+            }
+          }
+        }
+      }
+    },
+    "request_id": {
+      "type": "string"
+    }
+  }
+}
