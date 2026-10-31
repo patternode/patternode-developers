@@ -1,0 +1,62 @@
+---
+title: Service status
+sidebar_position: 3
+description: "The status page, its API, your account's view and the status events: how to know whether Patternode is up, and how to ask from code."
+---
+
+import CodeBlock from '@theme/CodeBlock';
+import src from '!!raw-loader!@examples/python/status_check.py';
+
+# Service status
+
+Patternode's status is published three ways. All three report the same components, by the same ids.
+
+| | What | Key | Use it for |
+|---|---|---|---|
+| The status page | [status.patternode.com](https://status.patternode.com): every component, open incidents, maintenance, 90 days of history | None | People, and the Atom or RSS feed for your on-call |
+| The status API | Files on the same host: `/api/v2/status.json`, `summary.json`, `components.json`, incidents, maintenance, uptime per component ([`specs/status.yaml`](pathname:///specs/status.yaml)) | None | Monitors, chat apps and agents; asking before you alarm |
+| Your account's view | `GET /v1/status` on the API ([reference](/api/get-account-status)) | Any key | The components that serve you in your jurisdiction, incidents that touch them, and this month's availability against your plan's target |
+| Status events | `status.incident.opened`, `.updated`, `.resolved` and `status.maintenance.scheduled` on your webhook endpoint ([events](/events)) | Your webhook secret | A push when something touches your account |
+
+The status page and its API are served apart from the API, from static files on a separate host, so they answer when the API does not. `GET /v1/status` is served by the API, so it cannot tell you the API is down: when a call fails, ask the status API.
+
+## Components
+
+| Id | Component | Now |
+|---|---|---|
+| `delve` | Delve API (a group of the four below) | Not yet in service |
+| `delve-segmentation` | Segmentation, `POST /v1/segmentations` | Not yet in service |
+| `delve-extend` | Forming series, `POST /v1/segmentations/extend` | Not yet in service |
+| `delve-jobs` | Jobs, `POST /v1/segmentations/jobs` | Not yet in service |
+| `delve-account` | Keys and account, `/v1/keys`, `/v1/account` | Not yet in service |
+| `webhooks` | Event delivery to your endpoint | Not yet in service |
+| `developer-portal` | developers.patternode.com | In service |
+| `website` | patternode.com | In service |
+
+A component listed before it is offered has the status `not_in_service`. It is never probed and never counts towards the overall indicator or availability. A client that does not know a status treats it as unknown, never as operational. Components are added per jurisdiction as Mission Critical opens in each. Their ids stay; match on them, not on names.
+
+## The format
+
+The status API's files follow the Atlassian Statuspage `/api/v2/` format, so tools that read Statuspage pages read this one: chat apps, monitoring services and most agents. What Patternode adds is marked in the spec: the status `not_in_service`, `uptime` on each component, `jurisdictions` on each incident, and `/api/v2/uptime/{component}.json`.
+
+| Overall `indicator` | When |
+|---|---|
+| `none` | Every component in service is operational |
+| `minor` | One is degraded |
+| `major` | One has a partial outage |
+| `critical` | One has a major outage |
+| `maintenance` | Maintenance is the worst there is |
+
+## How it is measured
+
+Probes outside Patternode call each component in service every 5 minutes. A run can be late by several minutes. A component is marked down after two failed probes in a row, and an open incident overrides the probes, so a problem a probe cannot see still shows. Each file is cached for up to 5 minutes. `page.updated_at` says when the probes last ran, and the page says so when that is more than 30 minutes ago, rather than showing green.
+
+The status page is how Patternode tells you about incidents. Your service levels are measured as [Service levels](service-levels.md) defines them, from the API's own records. `GET /v1/status` shows this month so far, and `GET /v1/service_levels` shows past months.
+
+## From code: ask before you alarm
+
+When your calls fail with 5xx, a timeout or `overloaded_error`, the cause is either Patternode or something on your side: your network, your proxy, your own deploy. Ask the status API which before paging anyone. Poll `status.json` at most once a minute, or subscribe to the status events instead of polling.
+
+<CodeBlock language="python" title="examples/python/status_check.py">{src}</CodeBlock>
+
+The mock serves the same files at `/api/v2/`, and `GET /v1/status`, so you can test this before you have a key.

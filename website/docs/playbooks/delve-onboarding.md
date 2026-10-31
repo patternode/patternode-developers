@@ -206,7 +206,7 @@ Gate: every test passed, with the results written down.
 | Area | In place |
 |---|---|
 | Monitoring | Your own indicators per transport: success rate, p99 latency, 429 rate, out-of-order and edge errors, event lag, dead-letter depth. Alerts on each, routed to your on-call |
-| Patternode's view | `status.patternode.com` subscribed to by your on-call; `GET /v1/service_levels` in your monthly review |
+| Patternode's view | `status.patternode.com`'s feed or the `status.*` events routed to your on-call; your alerts ask the status API before paging; `GET /v1/service_levels` in your monthly review |
 | Tracing | W3C `traceparent` sent on every request, so `server-timing` shows Patternode's share |
 | Runbooks | For: 429 storm, 5xx burst, failover, credential leak, webhook secret rotation, dead-letter redrive, catching a series up after a long outage |
 | Support | Technical contacts able to open Severity 1 by phone; your plan's numbers in the runbooks |

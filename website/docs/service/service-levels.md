@@ -30,7 +30,8 @@ A minute is unavailable when more than 1% of valid requests in it fail with a 5x
 
 - `GET /v1/service_levels` returns your account's indicators for the current and the last 12 months, per jurisdiction, as Patternode measures them.
 - Every response carries `request-id` and, when you send W3C `traceparent`, continues your trace, so your own monitoring sees Patternode's share of each request's time in `server-timing`.
-- The status page, `status.patternode.com`, shows each jurisdiction and transport, with subscriptions by email, webhook and RSS.
+- `GET /v1/status` returns this month's availability so far, with the components that serve you and any incident touching them.
+- The status page, `status.patternode.com`, shows every component, incidents and maintenance, with an Atom and RSS feed, a status API with no key, and `status.*` events on your webhook endpoint ([Service status](status.mdx)).
 
 ## Error budget and change
 

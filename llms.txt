@@ -16,6 +16,7 @@ The site is https://developers.patternode.com, with every page as Markdown and i
 
 - [OpenAPI 3.1](specs/openapi.yaml): every REST operation, with `x-status`
 - [AsyncAPI 3.1](specs/asyncapi.yaml): every event, on webhooks, subscriptions and event buses
+- [Status API](specs/status.yaml): status.patternode.com's files, no key, Statuspage format; ask it before you alarm ([Service status](website/docs/service/status.mdx))
 - [gRPC](specs/proto/patternode/delve/v1/delve.proto): the high-volume transport
 - [JSON Schemas](specs/schemas/): bar, sample, segment box, error, event
 - [Contract tests](tests/contract/test_contract.py): the contract as tests, for any implementation

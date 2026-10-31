@@ -130,5 +130,14 @@ class Bars(unittest.TestCase):
         self.assertEqual(bars_from_samples([(0, -1.0), (1, 0.0), (2, 1.0)], 60_000, offset=10)[0][4], 9.0)
 
 
+
+class StatusCheck(WithMock):
+    def test_the_status_page_says_whose_problem_it_is(self):
+        import status_check
+        self.assertEqual(status_check.status(self.base)["indicator"], "none")
+        self.assertEqual(status_check.open_incidents(self.base, {"delve-extend"}), [])
+        self.assertEqual(status_check.who_to_page(self.base, {"delve-extend"}), "us")
+        self.assertEqual(status_check.who_to_page("http://127.0.0.1:9"), "unknown")
+
 if __name__ == "__main__":
     unittest.main()

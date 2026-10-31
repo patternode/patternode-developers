@@ -13,6 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npx --yes @redocly/cli@2 lint specs/openapi.yaml
+      - run: npx --yes @redocly/cli@2 lint specs/status.yaml
       - run: npx --yes @asyncapi/cli@6 validate specs/asyncapi.yaml
       - run: python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('specs/schemas/*.json')]"
 

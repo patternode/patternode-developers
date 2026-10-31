@@ -33,6 +33,9 @@ from schema import errors, load  # noqa: E402
 BARS = json.loads((ROOT / "examples" / "data" / "export-kw.json").read_text())
 SEGMENT = load("segment-box.schema.json")
 ERROR = load("error.schema.json")
+INDICATORS = ("none", "minor", "major", "critical", "maintenance")
+COMPONENT_STATUSES = ("operational", "degraded_performance", "partial_outage", "major_outage",
+                      "under_maintenance", "not_in_service")
 REMOTE = bool(os.environ.get("PATTERNODE_BASE_URL")) and os.environ.get("PATTERNODE_CONTRACT_MOCK") != "1"
 
 
@@ -93,6 +96,18 @@ class Contract(unittest.TestCase):
         me = self.pn.get("/v1/whoami")
         self.assertEqual(me["object"], "key")
         self.assertIn(me["kind"], ("live", "test", "admin"))
+
+    def test_status_shows_the_components_that_serve_you(self):
+        st = self.pn.get("/v1/status")
+        self.assertEqual(st["object"], "account_status")
+        self.assertIn(st["jurisdiction"], ("anz", "eu", "us"))
+        self.assertIn(st["indicator"], INDICATORS)
+        self.assertTrue(st["components"], "an account is served by at least one component")
+        for c in st["components"]:
+            self.assertIn(c["status"], COMPONENT_STATUSES)
+        for i in st["incidents"] + st["scheduled_maintenances"]:
+            self.assertTrue(set(i["components"]) <= {c["id"] for c in st["components"]}, "only what touches you")
+        self.assertTrue(st["page_url"].startswith("https://"))
 
     def test_no_key_is_401(self):
         status, body = raw("GET", "/v1/whoami", None, {})
