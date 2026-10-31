@@ -3,7 +3,7 @@
     PATTERNODE_API_KEY=pnk_live_... python examples/python/finished_series.py examples/data/export-kw.json
 
 The series name is opaque: a hash of your client and asset, never their names. Patternode
-keeps nothing of a finished series after it answers.
+keeps nothing of the series after it answers; the segments live in your store.
 """
 
 import hashlib
@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from patternode_client import Patternode
+from segment_store import SegmentStore
 
 
 def series_name(client_id: str, asset_id: str, measure: str, salt: str) -> str:
@@ -24,14 +25,13 @@ def main(path: str) -> None:
     bars = json.loads(Path(path).read_text())
     name = series_name("example-utility", "inverter-07", "ac-power", salt="rotate-me-per-environment")
     pn = Patternode()
-    seg = pn.post("/v1/segmentations", {"series": name, "profile": "standard", "bars": bars})
-
-    out = Path("out") / f"{name.replace('/', '_')}.segments.json"
-    out.parent.mkdir(exist_ok=True)
-    out.write_text(json.dumps(seg["segments"]))  # in production: your own store, under your client's prefix
+    seg = pn.post("/v1/segmentations", {"series": name, "profile": "standard@2026-11", "bars": bars,
+                                        "return_edge": True})   # to carry on as a forming series later
+    store = SegmentStore(Path("out") / "example-utility")         # your store, under your client's prefix
+    store.apply_segmentation(name, seg)
     final = sum(not s["provisional"] for s in seg["segments"])
     print(f"{seg['series']}: {seg['bars']} bars -> {len(seg['segments'])} segments ({final} final), "
-          f"{seg['depth']} levels; stored {out}")
+          f"{seg['depth']} levels; a 600 px chart draws {len(store.cut(name, bars[0][0], bars[-1][1], 600))}")
 
 
 if __name__ == "__main__":

@@ -18,9 +18,9 @@ PATTERNODE_MOCK_PORT=5000 python mock/mock_patternode.py
 | Refuses a key of the wrong shape (401), a write without `x-amz-content-sha256` (400) or with the wrong hash (403) | Accepts any key of the right shape |
 | Refuses a test key on your own series (403 `test_key_demo_only`) | Never bills; reports a nominal `usage` |
 | Checks bars: order, high and low, values above zero, with `problems` listing each bad bar | Its segments are fake: every four children make a parent |
-| Refuses an out-of-order bar on a stream (409) and leaves the stream unchanged | Keeps everything in memory; a restart forgets it |
-| Replays the first answer to a repeated `Idempotency-Key`, and refuses one reused with another body (422) | Does not rate limit |
-| Runs uploads and jobs, and signs job webhooks to Standard Webhooks | Signs only when `PATTERNODE_MOCK_WEBHOOK_SECRET` is set, and does not retry |
+| Refuses a bar before the edge (409), an edge from another series (409) and a changed edge (400) | Its edge is signed but readable; the service's is also encrypted |
+| Keeps nothing of your series; refuses an `Idempotency-Key` reused with another body (422) | Does not rate limit; keeps keys and jobs in memory only |
+| Runs jobs from links to your storage, and signs job webhooks to Standard Webhooks | Serves a stand-in for your storage at `/_bucket/`; reads CSV and JSON Lines only; signs only when `PATTERNODE_MOCK_WEBHOOK_SECRET` is set |
 
 Use it to test your code's handling of the contract, never its handling of real segments: the shapes are right, the values mean nothing.
 

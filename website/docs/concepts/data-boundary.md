@@ -6,10 +6,13 @@ description: What Patternode receives, keeps and never sees, and how to name ser
 
 # Data boundary
 
+Patternode keeps none of your series: no copies, no checkpoints, no results.
+
 | | Finished series | Forming series |
 |---|---|---|
-| Patternode receives | Bars and a series name | Bars and a series name |
-| Patternode keeps | Usage records (counts, key, time). The series and its segments are not kept after the answer; a job's result is kept 24 hours behind its link, then deleted | A checkpoint of the open right edge, until you close the stream |
+| Patternode receives | Bars and a series name | Bars, a series name, and the edge you stored |
+| Patternode keeps | Nothing of the series. Usage records (counts, key, time) for billing | The same: nothing. The series' state is in its edge, which you keep |
+| Jobs | Read from a link to your storage, written to a link to your storage; the job record holds only status and usage | |
 | Patternode never sees | Who the client is, what the asset is, units, location, labels | The same |
 
 ## Naming series

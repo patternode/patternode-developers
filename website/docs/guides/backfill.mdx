@@ -1,7 +1,7 @@
 ---
 title: Backfill
 sidebar_position: 4
-description: Upload a large series file and run it as a job; take the result by webhook.
+description: A job reads your file from your storage and writes the result back to it. Patternode keeps nothing.
 ---
 
 import CodeBlock from '@theme/CodeBlock';
@@ -9,30 +9,39 @@ import src from '!!raw-loader!@examples/python/bulk_job.py';
 
 # Backfill
 
+For bodies over 5 MB, years of history and backtests. Your file stays in your storage: you give Patternode a link to read it from and a link to write the result to, both presigned in your own bucket. Patternode reads, segments, writes and keeps nothing.
+
 ```mermaid
 sequenceDiagram
   participant I as Your ingest workload
-  participant P as Patternode
-  participant U as Upload storage
-  participant W as Your webhook receiver
-  I->>P: POST /v1/uploads {format, size_bytes}
-  P-->>I: url, fields
-  I->>U: POST the file (fields, then file)
-  I->>P: POST /v1/segmentations/jobs {upload_id, kind, series}
+  participant B as Your storage
+  participant P as Patternode API
+  participant W as Your event receiver
+  I->>B: put the file; presign a GET for it and a PUT for the result
+  I->>P: POST /v1/segmentations/jobs {series, kind, format, source_url, result_url}
   P-->>I: 202 job queued
+  P->>B: GET source_url
+  P->>B: PUT result_url (the Segmentation, as JSON)
   P->>W: segmentation.job.succeeded (signed)
-  W->>I: queue
-  I->>P: GET result_url (signed link, no key)
+  W->>B: read the result
 ```
 
-| File | Format |
+| Field | Meaning |
 |---|---|
-| `jsonl` | One bar (or sample) a line, as JSON: `[1730246400000,1730249999000,412.0,430.5,405.2,428.1]` |
-| `csv` | A header row, then `open_time,close_time,open,high,low,close` (or `time,value`) |
+| `source_url` | A presigned GET to the file, valid for at least an hour |
+| `result_url` | A presigned PUT where the result is written |
+| `format` | `csv`, `jsonl`, `parquet` or `arrow` |
+| `kind` | `bars` or `samples` |
+| `return_edge` | Also return the edge, to carry on as a forming series from the end of the file |
 
-- Declare `size_bytes`: it is what counts against the day's upload bytes, and storage accepts no more.
-- One series per file. Run series in parallel up to your tier's concurrent jobs.
+| File | Layout |
+|---|---|
+| `jsonl` | One bar (or sample) a line: `[1730246400000,1730249999000,412.0,430.5,405.2,428.1]` |
+| `csv` | A header row, then `open_time,close_time,open,high,low,close` (or `time,value`) |
+| `parquet`, `arrow` | Columns `open_time, close_time, open, high, low, close` (or `time, value`), times as 64-bit integers |
+
+- One series per file. Run series in parallel up to your plan's concurrent jobs.
+- The job record keeps only its status and usage, never a link to your data.
 - A failed job is not charged; `error.details.problems` lists the bad rows.
-- The result link lasts 24 hours. Fetch and store it when the webhook arrives.
 
 <CodeBlock language="python" title="examples/python/bulk_job.py">{src}</CodeBlock>

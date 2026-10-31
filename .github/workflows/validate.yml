@@ -25,6 +25,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: python -m unittest discover -s examples/python/tests -v
+      - name: The contract suite, against the mock
+        run: python -m unittest discover -s tests/contract -v
       - name: TypeScript examples against the mock
         run: |
           PATTERNODE_MOCK_QUIET=1 python mock/mock_patternode.py &
@@ -51,6 +53,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: website/package-lock.json }
+      - name: Diagrams match their source
+        run: python website/diagrams/architecture.py --check
       - working-directory: website
         run: npm ci && npm run build
 

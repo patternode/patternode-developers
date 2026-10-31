@@ -11,21 +11,20 @@ description: The service level objectives, how each is measured, the error budge
 | Indicator | Production | Mission Critical | Dedicated | Measured |
 |---|---|---|---|---|
 | Availability | 99.9% | 99.99% | 99.99% (99.995% by agreement) | Valid requests answered without a 5xx or a timeout, over all minutes of the calendar month, per jurisdiction |
-| Append latency, REST | p99 50 ms | p50 10 ms, p99 40 ms | By agreement | From the last byte received at Patternode's edge to the first byte of the answer |
-| Append latency, gRPC stream | | p50 2 ms, p99 10 ms, p99.9 25 ms | p99 5 ms, by agreement | From a message received to its acknowledgement on the stream, at the edge |
+| Extension latency, REST | p99 50 ms | p50 10 ms, p99 40 ms | By agreement | From the last byte received at Patternode's edge to the first byte of the answer |
+| Extension latency, gRPC | | p50 2 ms, p99 10 ms, p99.9 25 ms | p99 5 ms, by agreement | From a request received to its answer on the stream, at the edge |
 | Finished series, inline | p99 2 s for up to 100,000 bars | p99 1 s for up to 100,000 bars | By agreement | Edge to edge |
 | Job start | p99 60 s | p99 15 s | p99 15 s | From 202 to `running` |
 | Job throughput | 10 million bars a minute per account | 50 million | Sized together | Bars processed across running jobs |
-| Event freshness, stream subscription | | p99 100 ms | p99 50 ms | From the append's acknowledgement to the event leaving the edge |
 | Event freshness, webhook | p99 30 s | p99 5 s | p99 5 s | From the event to the first delivery attempt |
-| Event delivery | At least once, retried for 24 hours | At least once, retried for 72 hours, replayable for 7 days | As Mission Critical | |
-| Durability of acknowledged appends | Replicated across three zones before the acknowledgement | The same, and replicated to the second region within 1 second | The same | |
+| Event delivery | At least once, retried for 24 hours | At least once, retried for 72 hours | As Mission Critical | |
+| Your series' data held | None: every answer is complete, and edges are yours | None | None | |
 
 Latency is measured at the edge so that it excludes the network between you and Patternode, which is yours to choose: put your caller in the same cloud region as your jurisdiction's endpoint, or use private connectivity.
 
 ## What counts as unavailable
 
-A minute is unavailable when more than 1% of valid requests in it fail with a 5xx, time out (30 seconds for REST, 5 seconds for a stream acknowledgement), or a stream is reset without a `GOAWAY` and its successor refuses to resume. These do not count: 4xx answers, including 429 within your plan's throughput; scheduled maintenance announced as the plan requires (none on Mission Critical and Dedicated, which are maintained without downtime); failures caused by your network or your cloud provider's network outside Patternode's edge; and preview or planned routes.
+A minute is unavailable when more than 1% of valid requests in it fail with a 5xx, time out (30 seconds for REST, 5 seconds for a gRPC answer), or a gRPC connection is reset without a `GOAWAY`. These do not count: 4xx answers, including 429 within your plan's throughput; scheduled maintenance announced as the plan requires (none on Mission Critical and Dedicated, which are maintained without downtime); failures caused by your network or your cloud provider's network outside Patternode's edge; and preview or planned routes.
 
 ## Your view of the indicators
 

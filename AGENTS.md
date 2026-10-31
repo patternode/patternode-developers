@@ -11,8 +11,8 @@ You are working for a partner who wants their system to use Delve (or later Esse
 1. Read [`llms.txt`](llms.txt) for the map, then `website/docs/concepts/shards.md` (what goes in and what comes out) and `website/docs/guides/integration-patterns.md` (which pattern your user needs).
 2. If your user's data is utilities or finance data, start from `examples/industries/<industry>/`.
 3. Start the mock: `python mock/mock_patternode.py`. Build and test everything against it first, with a fake key such as `pnk_live_` followed by 36 `B`s.
-4. Copy the client from `examples/python/patternode_client.py` or `examples/typescript/src/client.ts`, or generate one from `specs/openapi.yaml`. Keep what it does on every call: the key header, the body's SHA-256 in `x-amz-content-sha256`, an `Idempotency-Key` on every POST, retries that honour `retry-after`, and for streams a `sequence` on every bar.
-5. Write tests like `examples/python/tests/test_examples.py`: a bad series, a retry, a repeated and a skipped sequence, a 429, a forged webhook.
+4. Copy the client from `examples/python/patternode_client.py` or `examples/typescript/src/client.ts`, or generate one from `specs/openapi.yaml`. Keep what it does on every call: the key header, the body's SHA-256 in `x-amz-content-sha256`, an `Idempotency-Key` on every POST, retries that honour `retry-after`. For a forming series, keep its edge with its segments and send it with the next bars: `examples/python/segment_store.py` does this.
+5. Write tests like `examples/python/tests/test_examples.py`: a bad series, a retry, a bar before the edge, an edge from another series, a 429, a forged webhook. Then run `tests/contract` against the mock and, when your user has access, their staging account.
 6. For infrastructure, adapt `terraform/aws/delve-partner/`. Do not apply it unless your user asks you to.
 7. Real access is in `website/docs/get-started/access.md`. It is a person's step: your user emails Patternode. Tell them so; do not try to obtain keys yourself.
 
@@ -23,10 +23,11 @@ Rules:
 - Never call `https://api.patternode.com` with a live key unless your user has asked you to in this task.
 - Do not build production paths on operations or events whose `x-status` is `planned`.
 - Plans change capacity and service levels, never the API: code written now works on every plan.
+- Patternode keeps none of your user's series. Their segments and edges are theirs to store; losing an edge means sending the series again as a finished series.
 
 ## If you are changing this repository
 
-1. The specs are the contract. Change a spec first, then the mock, then the examples and their tests, then the pages. Never document behaviour the spec does not have.
+1. The specs are the contract. Change a spec first, then the contract tests (`tests/contract`), then the mock, then the examples and their tests, then the pages. Never document behaviour the spec does not have.
 2. One functional contract for every plan, product and industry. A route, field or event only one industry needs goes in `specs/overlays/<industry>.yaml` (OpenAPI Overlay 1.0), never in the core.
 3. Every operation and event carries `x-status`: `available`, `preview` or `planned`. A change to an `available` one must not break a client.
 4. Code shown on a page is imported from the file CI runs (`!!raw-loader!@examples/...` in an `.mdx` page). Never paste code into a page.
@@ -38,6 +39,8 @@ Rules:
 |---|---|
 | Run the mock | `python mock/mock_patternode.py` |
 | Test the Python examples | `python -m unittest discover -s examples/python/tests -v` |
+| The contract suite | `python -m unittest discover -s tests/contract -v` (mock); with `PATTERNODE_BASE_URL` and `PATTERNODE_API_KEY`, against a deployment |
+| Redraw the diagrams | `python website/diagrams/architecture.py` (edit the script, never the SVGs) |
 | Test the TypeScript examples | `cd examples/typescript && npm test` (mock running) |
 | Lint the specs | `npx @redocly/cli@2 lint specs/openapi.yaml` and `npx @asyncapi/cli@6 validate specs/asyncapi.yaml` |
 | Build the site | `cd website && npm ci && npm run build` (regenerates the API and events pages; fails on broken links) |

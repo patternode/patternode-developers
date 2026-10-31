@@ -130,6 +130,7 @@ const config: Config = {
       logo: {alt: 'Patternode', src: 'img/logo.svg', srcDark: 'img/logo-reverse.svg'},
       items: [
         {type: 'docSidebar', sidebarId: 'docs', label: 'Docs', position: 'left'},
+        {to: '/architecture', label: 'Architecture', position: 'left'},
         {type: 'docSidebar', sidebarId: 'api', label: 'API reference', position: 'left'},
         {to: '/events', label: 'Events', position: 'left'},
         {to: '/service', label: 'Service contract', position: 'left'},

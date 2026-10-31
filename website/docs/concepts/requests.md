@@ -20,7 +20,7 @@ Every `POST`, `PUT` and `PATCH` to `/v1/` sends the SHA-256 of the exact body by
 
 ## Idempotency
 
-Send `Idempotency-Key` on every `POST`, a fresh UUID per operation and the same one on every retry of it. A repeat within 24 hours returns the first answer and runs nothing; the same key with a different body is 422 `idempotency_conflict`.
+Send `Idempotency-Key` on every `POST`, a fresh UUID per operation and the same one on every retry of it. For 24 hours Patternode keeps the key and a hash of the request, never its data: a repeat is not billed twice, and the same key with a different body is 422 `idempotency_conflict`. Segmentations are recomputed on a repeat, and give the same answer, because they are deterministic.
 
 ## Every response
 
@@ -39,20 +39,21 @@ Branch on `error.details.error_code`; the message is for people and may change.
 
 | Status | `error.type` | `error_code` | Do |
 |---|---|---|---|
-| 400 | `invalid_request_error` | `invalid_series` (with `problems`), `body_too_large`, `missing_content_sha256` | Fix the request. For `body_too_large`, use an upload and a job |
+| 400 | `invalid_request_error` | `invalid_series` (with `problems`), `body_too_large`, `missing_content_sha256` | Fix the request. For `body_too_large`, run a job from your storage |
 | 401 | `authentication_error` | `missing_api_key`, `invalid_api_key`, `key_disabled`, `key_expired` | Check the secret store; rotate |
 | 402 | `billing_error` | `credit_balance_too_low` | Add credit, or turn on auto-reload |
 | 403 | `permission_error` | `missing_scope`, `test_key_demo_only`, `terms_not_accepted` | Use the right key |
 | 404 | `not_found_error` | `not_found` | |
-| 409 | `conflict_error` | `out_of_order` | Resend the bar in order; the stream is unchanged |
+| 400 | `invalid_request_error` | `edge_invalid` | The edge was changed or is not Patternode's: use the one you stored |
+| 409 | `conflict_error` | `out_of_order`, `edge_mismatch` | A bar before the edge's last close, or an edge from another series or profile version. Nothing was applied |
 | 422 | `invalid_request_error` | `idempotency_conflict` | A new operation needs a new key |
-| 429 | `rate_limit_error` | `rate_limited`, `upload_quota_reached`, `enforced_spend_limit_reached`, `customer_spend_limit_reached` | Wait for `retry-after`. Spend limits do not clear by waiting: raise the limit |
+| 429 | `rate_limit_error` | `rate_limited`, `enforced_spend_limit_reached`, `customer_spend_limit_reached` | Wait for `retry-after`. Spend limits do not clear by waiting: raise the limit |
 | 503 | `overloaded_error` | `service_capacity` | Wait for `retry-after` |
 | 5xx | `api_error` | `internal` | Retry with backoff |
 
 ## Rate limits
 
-Each response carries `ratelimit-policy` and `ratelimit` (IETF RateLimit headers), so your client can slow down before it is refused. Limits are per account and per key: requests a minute, samples a minute, concurrent jobs, upload bytes a day, set by your tier. Your onboarding pack gives your tier's numbers.
+Each response carries `ratelimit-policy` and `ratelimit` (IETF RateLimit headers), so your client can slow down before it is refused. Limits are per account and per key: requests a minute, samples a minute and concurrent jobs, set by your plan. Your onboarding pack gives your tier's numbers.
 
 ## Retries
 

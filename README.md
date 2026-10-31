@@ -8,6 +8,7 @@ Everything you need to integrate with Patternode's products: Delve, the shards t
 |---|---|
 | Trying it out | Run the mock and the first example below. No account needed |
 | Ready for real keys | Read [Getting access](website/docs/get-started/access.md): email `partners@patternode.com` for an evaluation account |
+| An enterprise or solution architect | Read the [architecture overview](website/docs/architecture/index.md), then the views for your role |
 | Planning an integration | Follow the [Delve onboarding playbook](website/docs/playbooks/delve-onboarding.md), eleven stages from plan to go-live |
 | A coding agent | Read [AGENTS.md](AGENTS.md), then [`llms.txt`](llms.txt) |
 | Checking what we commit to | Read the [service contract](website/docs/service/index.md): plans, service levels, resilience, security, support |
@@ -33,6 +34,7 @@ The mock answers in the real API's shapes with fake segments, so what you build 
 | `specs/` | The contracts: `openapi.yaml` (REST), `asyncapi.yaml` (webhooks, subscriptions, event buses), `proto/` (gRPC), `schemas/` (JSON Schema). Generate clients from them |
 | `examples/` | Code that runs: a client, every integration pattern and key management in Python and TypeScript; curl; industry overlays in `examples/industries/` |
 | `mock/` | A local stand-in for the API, one file of standard-library Python |
+| `tests/contract/` | The contract as tests: run against the mock in CI, and against any deployment of the API |
 | `terraform/` | Your side on AWS: key vault, segment store, webhook receiver |
 | `website/` | The Docusaurus site; its pages are in `website/docs/` |
 
