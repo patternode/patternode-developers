@@ -6,6 +6,10 @@ description: Changes to the API, the events, the profiles and this site.
 
 # Changelog
 
+## Unreleased
+
+- Error `storage_unreachable`: a job failed, uncharged, because Patternode could not read its `source_url` or write its `result_url`.
+
 ## 1.0.0-draft.2, 2026-10-31
 
 - Patternode keeps none of your series. A forming series is carried by its sealed edge: `POST /v1/segmentations/extend` and `/extend/batch` replace the stream routes (`/v1/streams`, sequences, checkpoints), and `return_edge` lets a finished series carry on. Errors `edge_invalid` and `edge_mismatch` replace `sequence_gap`.

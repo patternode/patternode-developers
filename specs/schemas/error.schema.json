@@ -64,6 +64,7 @@
                 "credit_balance_too_low",
                 "rate_limited",
                 "upload_quota_reached",
+                "storage_unreachable",
                 "enforced_spend_limit_reached",
                 "customer_spend_limit_reached",
                 "service_capacity",
