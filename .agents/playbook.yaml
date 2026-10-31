@@ -1,0 +1,13 @@
+# This repository's facts for the Patternode playbook
+# (patternode-architecture governance/playbook/references/repository-profile.md).
+# Facts only: the rules are the playbook's. No master session is named for this repository yet.
+repository: patternode-developers
+playbook: "1.0"
+trunk: main
+production_pointer: none
+merge_role: Dermot O'Brien
+release_role: Dermot O'Brien
+merge_publishes: the developer site (deploy-pages.yml on every push to main)
+owner: Dermot O'Brien
+procedures: AGENTS.md, "If you are changing this repository"
+checks: validate.yml
