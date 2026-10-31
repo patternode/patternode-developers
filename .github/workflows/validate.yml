@@ -9,7 +9,7 @@ jobs:
   specs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npx --yes @redocly/cli@2 lint specs/openapi.yaml
@@ -19,7 +19,7 @@ jobs:
   examples:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - uses: actions/setup-node@v4
@@ -39,7 +39,7 @@ jobs:
   terraform:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v3
       - run: terraform fmt -check -recursive terraform
       - working-directory: terraform/aws/delve-partner
@@ -48,7 +48,7 @@ jobs:
   site:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: website/package-lock.json }
       - working-directory: website
@@ -57,7 +57,7 @@ jobs:
   public-content:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: No live-looking keys outside the mock's fake ones
         run: |
           if grep -rnIE '\bpnk_(live|test|admin)_[0-9A-Za-z]{36}\b' --exclude-dir=node_modules --exclude-dir=.git . \
