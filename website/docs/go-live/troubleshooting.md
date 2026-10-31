@@ -17,6 +17,7 @@ description: Symptoms, causes and fixes for the problems integrations meet most.
 | 409 `edge_mismatch` | The edge sent belongs to another series or profile version | Read the edge for this series from your store; keep one writer per series |
 | 400 `edge_invalid` | The edge was changed, truncated or re-encoded on its way through your store | Store it as an opaque string, exactly as received |
 | 409 `out_of_order` | A late bar, or an edge older than the bars (a second writer moved on) | Drop the bar, or read the latest edge; nothing was applied |
+| A failed job with `storage_unreachable` | Patternode could not read `source_url` or write `result_url`: the link expired, its signature does not cover a GET or PUT, or the bucket refused it. The job was not charged | Sign the links for at least an hour, the GET for the file and the PUT for the result, and run the job again |
 | 429 `rate_limited` that does not clear | Sustained traffic over your plan | Smooth to the rate in `ratelimit-policy`, or ask for capacity |
 | 429 `enforced_spend_limit_reached` | The plan's monthly cap | Waiting does not clear it: move up a plan |
 | Webhooks rejected after a rotation | The receiver holds only the new secret | Keep the previous one too, until the next rotation |
