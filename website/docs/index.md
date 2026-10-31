@@ -2,7 +2,7 @@
 title: Patternode for developers
 slug: /
 sidebar_position: 0
-description: Integrate with Patternode's products. Delve first, formerly Mosaic, the shards toolkit.
+description: Integrate with Patternode's products. Delve first, the shards toolkit.
 ---
 
 # Patternode for developers
