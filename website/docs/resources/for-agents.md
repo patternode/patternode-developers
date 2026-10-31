@@ -25,7 +25,7 @@ This site is written to be read by agents as well as people.
 2. Build and test against the mock (`python mock/mock_patternode.py`) before any real key is used.
 3. Never write a key into code, a file, a commit, a log or a message. Read it from the environment or a secret store. Never ask a person to paste one into a chat.
 4. Never call a production endpoint with a live key unless the person you work for has asked you to, in this task.
-5. Copy the client from `examples/` or generate one from the specs; keep the body hash, idempotency keys, sequences and retries.
+5. Copy the client from `examples/` or generate one from the specs; keep the body hash, idempotency keys and retries, and store each forming series' edge with its segments ([Your segment store](../guides/segment-store.mdx)).
 6. Respect `x-status`: do not build production paths on `planned` operations.
 7. Start from the industry overlay that matches your user's data: `examples/industries/`.
 8. Getting real access is a person's step ([Getting access](../get-started/access.md)): tell your user to email Patternode. Do not try to obtain keys yourself.

@@ -20,14 +20,20 @@ test("errors carry the code", async () => {
     (e: PatternodeError) => e.code === "invalid_series" && e.problems[0].problem === "times_not_increasing");
 });
 
-test("a forming series closes segments", async () => {
-  const s = await live.post("/v1/streams", { series: "ts/forming", bar: [0, 9, 1, 2, 1, 2] });
+test("a forming series carries its edge; nothing is kept between calls", async () => {
+  let edge: string | undefined;
   let closed = 0;
-  for (let i = 1; i < 12; i++) {
-    const r = await live.post(`/v1/streams/${s.stream_id}/observations`, { sequence: i + 1, bar: [i * 10, i * 10 + 9, 1, 2, 1, 2] });
-    closed += r.events.filter((e: any) => e.kind === "segmented").length;
+  for (let i = 0; i < 12; i++) {
+    const body: any = { series: "ts/forming", profile: "standard@2026-11", bars: [[i * 10, i * 10 + 9, 1, 2, 1, 2]] };
+    if (edge) body.edge = edge;
+    const r = await live.post("/v1/segmentations/extend", body);
+    closed += r.closed.length;
+    edge = r.edge;
   }
   assert.ok(closed > 0);
+  const again = await live.post("/v1/segmentations/extend", { series: "ts/forming", edge, bars: [[200, 209, 1, 2, 1, 2]] });
+  const retry = await live.post("/v1/segmentations/extend", { series: "ts/forming", edge, bars: [[200, 209, 1, 2, 1, 2]] });
+  assert.deepEqual(again.right_edge, retry.right_edge);
 });
 
 test("webhook signatures verify and reject tampering", () => {
@@ -38,4 +44,13 @@ test("webhook signatures verify and reject tampering", () => {
   const h = { "webhook-id": "msg_1", "webhook-timestamp": ts, "webhook-signature": `v1,${sig}` };
   assert.equal(verify(secret, h, body).type, "segmentation.job.succeeded");
   assert.throws(() => verify(secret, h, body.replace("succeeded", "failed")));
+});
+
+test("the segment store carries the edge and cuts by width", async () => {
+  const { SegmentStore } = await import("./segment-store.ts");
+  const store = new SegmentStore();
+  for (let i = 0; i < 40; i++) await store.extend(live, "ts/store", [[i * 10, i * 10 + 9, 1 + i, 2 + i, 1 + i, 2 + i]]);
+  assert.ok(store.edge("ts/store")?.token.startsWith("pne1."));
+  assert.ok(store.rightEdge("ts/store").length > 0);
+  assert.ok(store.cut("ts/store", 0, 400, 20).length < store.cut("ts/store", 0, 400, 4000).length);
 });

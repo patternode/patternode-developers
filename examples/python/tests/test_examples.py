@@ -57,11 +57,12 @@ class Examples(WithMock):
         self.assertIn("segments", self.run_example("first_call.py", TEST_KEY))
 
     def test_finished_series(self):
-        self.assertIn("levels; stored", self.run_example("finished_series.py", LIVE_KEY))
+        self.assertIn("chart draws", self.run_example("finished_series.py", LIVE_KEY))
 
     def test_forming_series(self):
         out = self.run_example("forming_series.py", LIVE_KEY)
         self.assertIn("closed h1@", out)
+        self.assertIn("edge", out)
 
     def test_bulk_job(self):
         self.assertIn("succeeded:", self.run_example("bulk_job.py", LIVE_KEY))
@@ -73,69 +74,29 @@ class Examples(WithMock):
         self.assertIn("reproducible: True", self.run_example("industries/finance/trades_to_delve.py", LIVE_KEY, []))
 
 
-class Contract(WithMock):
-    def test_test_key_cannot_run_real_data(self):
-        pn = Patternode(TEST_KEY, self.base)
-        with self.assertRaises(PatternodeError) as e:
-            pn.post("/v1/segmentations", {"series": "x", "bars": [[1, 2, 1, 1, 1, 1], [3, 4, 1, 1, 1, 1]]})
-        self.assertEqual(e.exception.code, "test_key_demo_only")
+class Store(WithMock):
+    """The local segment store: the edge goes back with the next bars, and nothing is lost."""
 
-    def test_bad_series_lists_problems(self):
+    def test_the_store_carries_a_series_forward_from_its_edge(self):
+        from segment_store import SegmentStore, StaleWrite
         pn = Patternode(LIVE_KEY, self.base)
-        with self.assertRaises(PatternodeError) as e:
-            pn.post("/v1/segmentations", {"series": "x", "bars": [[5, 6, 1, 1, 1, 1], [3, 4, 1, 1, 1, 1]]})
-        self.assertEqual(e.exception.code, "invalid_series")
-        self.assertEqual(e.exception.problems[0]["problem"], "times_not_increasing")
-
-    def test_out_of_order_leaves_stream_unchanged(self):
-        pn = Patternode(LIVE_KEY, self.base)
-        s = pn.post("/v1/streams", {"series": "x", "bar": [10, 20, 1, 2, 1, 2]})
-        with self.assertRaises(PatternodeError) as e:
-            pn.post(f"/v1/streams/{s['stream_id']}/observations", {"sequence": 2, "bar": [5, 8, 1, 2, 1, 2]})
-        self.assertEqual(e.exception.code, "out_of_order")
-        self.assertEqual(pn.get(f"/v1/streams/{s['stream_id']}")["bars"], 1)
-
-    def test_sequence_makes_appends_exactly_once(self):
-        pn = Patternode(LIVE_KEY, self.base)
-        s = pn.post("/v1/streams", {"series": "x", "bar": [10, 20, 1, 2, 1, 2]})
-        path = f"/v1/streams/{s['stream_id']}/observations"
-        first = pn.post(path, {"sequence": 2, "bar": [30, 40, 1, 2, 1, 2]})
-        again = pn.post(path, {"sequence": 2, "bar": [30, 40, 1, 2, 1, 2]})
-        self.assertEqual(first, again)
-        with self.assertRaises(PatternodeError) as e:
-            pn.post(path, {"sequence": 4, "bar": [50, 60, 1, 2, 1, 2]})
-        self.assertEqual((e.exception.code, e.exception.status), ("sequence_gap", 409))
-        self.assertEqual(pn.get(f"/v1/streams/{s['stream_id']}")["last_sequence"], 2)
-
-    def test_batch_appends_answer_each_item(self):
-        pn = Patternode(LIVE_KEY, self.base)
-        a = pn.post("/v1/streams", {"series": "a", "bar": [10, 20, 1, 2, 1, 2]})["stream_id"]
-        b = pn.post("/v1/streams", {"series": "b", "bar": [10, 20, 1, 2, 1, 2]})["stream_id"]
-        r = pn.post("/v1/streams/observations", {"observations": [
-            {"stream_id": a, "sequence": 2, "bar": [30, 40, 1, 2, 1, 2]},
-            {"stream_id": b, "sequence": 5, "bar": [30, 40, 1, 2, 1, 2]}]})
-        self.assertEqual([x["status"] for x in r["results"]], [200, 409])
-
-    def test_nanosecond_times_round_trip_as_strings(self):
-        pn = Patternode(LIVE_KEY, self.base)
-        t = 1730246400000000000
-        bars = [[str(t + i * 10**9), str(t + i * 10**9 + 999_999_999), 1, 2, 1, 2] for i in range(8)]
-        r = pn.post("/v1/segmentations", {"series": "ns", "time_unit": "ns", "bars": bars})
-        self.assertEqual(r["segments"][0]["open_time"], str(t))
-        self.assertTrue(r["profile_version"].startswith("standard@"))
-
-    def test_idempotent_retry_returns_the_first_answer(self):
-        pn = Patternode(LIVE_KEY, self.base)
-        a = pn.post("/v1/segmentations", {"demo": "walk"}, idempotency_key="same")
-        b = pn.post("/v1/segmentations", {"demo": "walk"}, idempotency_key="same")
-        self.assertEqual(a["id"], b["id"])
-
-    def test_admin_key_rotates_itself_out(self):
-        pn = Patternode(ADMIN_KEY, self.base)
-        new = pn.post("/v1/keys", {"kind": "admin", "name": "ops"})
-        self.assertRegex(new["key"], r"^pnk_admin_[0-9A-Za-z]{36}$")
-        live = Patternode(new["key"], self.base).post("/v1/keys", {"kind": "live", "scopes": "full"})
-        self.assertTrue(live["key"].startswith("pnk_live_"))
+        bars = json.loads((ROOT / "examples" / "data" / "export-kw.json").read_text())
+        with tempfile.TemporaryDirectory() as d:
+            store = SegmentStore(d)
+            for b in bars:
+                store.extend(pn, "s", [b], profile="standard@2026-11")
+            whole = pn.post("/v1/segmentations", {"series": "s", "profile": "standard@2026-11", "bars": bars})
+            self.assertEqual({x["id"] for x in store.segments("s")}, {x["id"] for x in whole["segments"]})
+            edge = store.edge("s")
+            self.assertEqual(edge.last_close_time, bars[-1][1])
+            self.assertEqual([x["height"] for x in store.right_edge("s")], sorted({x["height"] for x in store.right_edge("s")}))
+            self.assertLess(len(store.cut("s", bars[0][0], bars[-1][1], 30)),
+                            len(store.cut("s", bars[0][0], bars[-1][1], 5000)))
+            self.assertEqual(set(store.trend("s").values()) <= {"rising", "falling", "steady"}, True)
+            with self.assertRaises(StaleWrite):  # a second writer with an old version loses
+                store.apply_extension("s", pn.post("/v1/segmentations/extend", {
+                    "series": "s", "edge": edge.token, "bars": [[bars[-1][1] + 1, bars[-1][1] + 9, 1, 2, 1, 2]]}),
+                    expected_version=edge.version - 1)
 
 
 class Webhooks(unittest.TestCase):

@@ -26,7 +26,7 @@ The numbers on these pages are the service's specification. They bind when your 
 | [Plans](plans.md) | The four plans, what each guarantees, and which grade each serves |
 | [Service levels](service-levels.md) | Availability, latency, throughput, durability, freshness and how each is measured; credits |
 | [Resilience](resilience.md) | Jurisdictions and regions, failover, recovery objectives, degradation, change control, testing, exit |
-| [Real-time](realtime.md) | Transports (REST, gRPC streams, WebSocket subscriptions, event buses), ordering, exactly-once effect, backpressure, time precision, determinism |
+| [Real-time](realtime.md) | Nothing kept between calls; transports (REST, gRPC, event buses), ordering, exactly-once effect, backpressure, time precision, determinism |
 | [Security](security.md) | Authentication, private connectivity, encryption, keys you manage, audit |
 | [Compliance](compliance.md) | Assurance reports, and how the service maps to the rules utilities and funds work under |
 | [Support](support.md) | Severities, response times, incident communication, status |

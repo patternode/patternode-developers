@@ -68,8 +68,9 @@
                 "customer_spend_limit_reached",
                 "service_capacity",
                 "internal",
-                "sequence_gap",
-                "invalid_content_sha256"
+                "invalid_content_sha256",
+                "edge_mismatch",
+                "edge_invalid"
               ]
             },
             "problems": {
@@ -85,10 +86,6 @@
                   }
                 }
               }
-            },
-            "expected_sequence": {
-              "type": "integer",
-              "description": "With sequence_gap: the sequence to send next."
             }
           }
         }

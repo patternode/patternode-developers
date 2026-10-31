@@ -4,9 +4,14 @@
     PATTERNODE_MOCK_PORT=5000 python mock/mock_patternode.py
 
 It checks what the real service checks at the door (the key's shape, the body hash on
-writes, scopes, time order) and answers in the real shapes. The segments are FAKE: every
-four children make a parent. Never draw conclusions from them; they exist so your code can
-be tested against the contract in specs/openapi.yaml.
+writes, scopes, time order, the edge's seal) and answers in the real shapes. The segments
+are FAKE: every four children make a parent. Never draw conclusions from them; they exist
+so your code can be tested against the contract in specs/openapi.yaml.
+
+Like the service, the mock keeps none of your series. A forming series travels as its edge:
+the mock's edge is signed but readable, where the service's is also encrypted. Jobs read
+from and write to links you give; for tests, the mock serves a stand-in for your storage at
+/_bucket/<path> (GET and PUT, no key).
 
 Any key of the right shape is accepted. A pnk_test_ key may run only {"demo": ...}, as in
 production. Webhooks for jobs are signed with PATTERNODE_MOCK_WEBHOOK_SECRET when it is set.
@@ -29,11 +34,11 @@ from urllib.parse import urlparse
 
 KEY = re.compile(r"^pnk_(live|test|admin)_[0-9A-Za-z]{36}$")
 FAN = 4  # FAKE: children per parent
-EMPTY_SHA = hashlib.sha256(b"").hexdigest()
+PROFILE_VERSION = "2026-11"
+SEAL_KEY = b"patternode-mock-edge-key"  # the mock's own; the service's is per account and secret
 PRESETS = {
-    "full": ["segment:run", "segment:read", "series:write", "stream:write", "stream:read"],
-    "read-only": ["segment:read", "stream:read"],
-    "stream-only": ["stream:write", "stream:read"],
+    "full": ["segment:run", "segment:read"],
+    "read-only": ["segment:read"],
     "admin": ["usage:read", "keys:manage", "billing:manage"],
 }
 DEMO = {
@@ -43,7 +48,9 @@ DEMO = {
                 50 + (i % 8), 53 + (i % 8), 49 + (i % 8), 51 + (i % 8)] for i in range(64)],
 }
 
-STATE = {"streams": {}, "uploads": {}, "jobs": {}, "keys": {}, "idem": {},
+# Account metadata only: jobs (status and usage), keys, idempotency hashes, settings.
+# Never a series, an edge or a result. _bucket stands in for the partner's own storage.
+STATE = {"jobs": {}, "keys": {}, "idem": {}, "bucket": {},
          "account": {"webhook_url": None, "spend_limit_usd": None}}
 LOCK = threading.Lock()
 
@@ -62,8 +69,6 @@ class ApiError(Exception):
 
     def body(self) -> dict:
         details = {"error_code": self.code}
-        if getattr(self, "expected_sequence", None):
-            details["expected_sequence"] = self.expected_sequence
         if self.problems:
             details["problems"] = self.problems
         return {"type": "error", "error": {"type": self.etype, "message": self.message, "details": details},
@@ -76,7 +81,7 @@ def invalid(message: str, code: str = "invalid_series", problems=None) -> ApiErr
 
 # Series ------------------------------------------------------------------------------
 
-def check_bars(bars) -> list[list[float]]:
+def check_bars(bars, after: float | None = None) -> list[list[float]]:
     if not isinstance(bars, list) or len(bars) < 1:
         raise invalid("`bars` must be a non-empty list.")
     problems = []
@@ -95,6 +100,9 @@ def check_bars(bars) -> list[list[float]]:
             problems.append({"index": i, "problem": "times_not_increasing"})
     if problems:
         raise invalid(f"{len(problems)} bar(s) cannot be used.", problems=problems[:50])
+    if after is not None and bars[0][0] <= after:
+        raise ApiError(409, "conflict_error", "out_of_order",
+                       "The first bar opens before the edge's last bar closed. Nothing was applied.")
     return bars
 
 
@@ -110,7 +118,13 @@ def bars_from_samples(samples) -> list[list[float]]:
     return check_bars(out)
 
 
-def box(height: int, order: int, children: list[dict], parent: str | None, provisional: bool) -> dict:
+def leaf(b: list) -> dict:
+    mid = (b[0] + b[1]) // 2
+    return {"id": f"h0@{int(b[0])}", "bars": 1, "open_time": b[0], "open": b[2], "high_time": mid, "high": b[3],
+            "low_time": mid, "low": b[4], "close_time": b[1], "close": b[5]}
+
+
+def summarise(height: int, order: int, children: list[dict], parent: str | None, provisional: bool) -> dict:
     hi = max(children, key=lambda c: c["high"])
     lo = min(children, key=lambda c: c["low"])
     return {"id": f"h{height}@{int(children[0]['open_time'])}", "parent": parent, "height": height,
@@ -120,37 +134,55 @@ def box(height: int, order: int, children: list[dict], parent: str | None, provi
             "close_time": children[-1]["close_time"], "close": children[-1]["close"], "provisional": provisional}
 
 
-def fake_tree(bars: list[list[float]]) -> list[dict]:
-    """FAKE segments: groups of FAN children at each level until one segment remains."""
-    level = [{"id": f"h0@{int(b[0])}", "bars": 1, "open_time": b[0], "close_time": b[1], "open": b[2],
-              "high": b[3], "low": b[4], "close": b[5], "high_time": (b[0] + b[1]) // 2,
-              "low_time": (b[0] + b[1]) // 2} for b in bars]
-    levels, height = [], 0
-    while len(level) > 1 or height == 0:
-        height += 1
-        groups = [level[i:i + FAN] for i in range(0, len(level), FAN)]
-        level = [box(height, n, g, None, provisional=(n == len(groups) - 1)) for n, g in enumerate(groups)]
-        levels.append((level, groups))
-        if len(level) == 1:
-            break
-    out = []
-    for h in range(len(levels) - 1, -1, -1):  # parents first
-        boxes, _ = levels[h]
-        if h + 1 < len(levels):
-            parents, pgroups = levels[h + 1]
-            for p, g in zip(parents, pgroups):
-                for child in g:
-                    child["parent"] = p["id"]
-        out.extend(boxes)
-    order = {b["id"]: b for b in out}
-    return sorted(order.values(), key=lambda b: (-b["height"], b["open_time"]))
+LEAF_KEYS = ("id", "bars", "open_time", "open", "high_time", "high", "low_time", "low", "close_time", "close")
 
 
-def right_edge(segments: list[dict]) -> list[dict]:
-    return sorted([s for s in segments if s["provisional"]], key=lambda s: s["height"])
+class Tree:
+    """FAKE incremental segmentation. Its whole state is the open group at each level, which
+    is what the edge carries; extending bar by bar equals segmenting all bars at once."""
 
+    def __init__(self, state: dict | None = None):
+        state = state or {}
+        self.levels: list[list[dict]] = state.get("levels", [])   # open children, per level from 1
+        self.orders: list[int] = state.get("orders", [])          # order of the open node, per level
+        self.bars: int = state.get("bars", 0)
+        self.last_close = state.get("last_close")
 
-PROFILE_VERSION = "2026-11"
+    def state(self) -> dict:
+        return {"levels": self.levels, "orders": self.orders, "bars": self.bars, "last_close": self.last_close}
+
+    def _push(self, h: int, child: dict, closed: list[dict]) -> None:
+        """Offer a child to level h (1-based); close the open node when it is full."""
+        while len(self.levels) < h:
+            self.levels.append([])
+            self.orders.append(0)
+        group = self.levels[h - 1]
+        if len(group) == FAN:
+            node = summarise(h, self.orders[h - 1], group, None, False)
+            self.levels[h - 1] = [child]
+            self.orders[h - 1] += 1
+            self._push(h + 1, {k: node[k] for k in LEAF_KEYS}, closed)
+            node["parent"] = f"h{h + 1}@{int(self.levels[h][0]['open_time'])}"  # the group it joined
+            closed.append(node)
+        else:
+            group.append(child)
+
+    def extend(self, bars: list) -> list[dict]:
+        closed: list[dict] = []
+        for b in bars:
+            self._push(1, leaf(b), closed)
+            self.bars += 1
+            self.last_close = b[1]
+        return closed
+
+    def right_edge(self) -> list[dict]:
+        edge = []
+        for h, group in enumerate(self.levels, start=1):
+            if not group:
+                continue
+            parent = f"h{h + 1}@{int(self.levels[h][0]['open_time'])}" if h < len(self.levels) and self.levels[h] else None
+            edge.append(summarise(h, self.orders[h - 1], group, parent, True))
+        return edge
 
 
 def profile_version(profile: str | None) -> str:
@@ -158,6 +190,37 @@ def profile_version(profile: str | None) -> str:
     if not re.fullmatch(r"[a-z][a-z0-9-]*(@[0-9]{4}-[0-9]{2})?", profile):
         raise invalid("`profile` is a name, optionally @YYYY-MM.", "invalid_request")
     return profile if "@" in profile else f"{profile}@{PROFILE_VERSION}"
+
+
+def b64(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+
+def unb64(s: str) -> bytes:
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def seal(account: str, series: str, version: str, tree: Tree) -> str:
+    payload = b64(json.dumps({"v": 1, "a": account, "s": series, "p": version, "t": tree.state()},
+                             separators=(",", ":")).encode())
+    mac = b64(hmac.new(SEAL_KEY, f"pne1.{payload}.mock".encode(), hashlib.sha256).digest())
+    return f"pne1.{payload}.mock.{mac}"
+
+
+def unseal(edge: str, account: str, series: str, version: str | None) -> tuple[Tree, str]:
+    try:
+        prefix, payload, kid, mac = edge.split(".")
+        good = hmac.compare_digest(mac, b64(hmac.new(SEAL_KEY, f"pne1.{payload}.{kid}".encode(),
+                                                     hashlib.sha256).digest()))
+        data = json.loads(unb64(payload)) if good and prefix == "pne1" else None
+    except Exception:
+        data = None
+    if not data:
+        raise invalid("The edge is not one Patternode sealed, or it was changed.", "edge_invalid")
+    if data["a"] != account or data["s"] != series or (version and data["p"] != version):
+        raise ApiError(409, "conflict_error", "edge_mismatch",
+                       "This edge belongs to another account, series or profile version. Nothing was applied.")
+    return Tree(data["t"]), data["p"]
 
 
 def to_ms(values: list, unit: str) -> list:
@@ -189,67 +252,50 @@ def times_out(obj, unit: str):
     if isinstance(obj, list):
         return [times_out(o, unit) for o in obj]
     if isinstance(obj, dict):
-        return {k: (str(int(v)) if k.endswith("_time") and isinstance(v, (int, float)) else times_out(v, unit))
-                for k, v in obj.items()}
+        return {k: (str(int(v)) if (k.endswith("_time") or k == "edge_last_close_time") and isinstance(v, (int, float))
+                    else times_out(v, unit)) for k, v in obj.items()}
     return obj
 
 
-def segmentation(series: str, profile: str, bars: list) -> dict:
-    segs = fake_tree(bars)
-    samples = len(bars)
-    return {"object": "segmentation", "id": new_id("seg_"), "series": series, "profile_version": profile_version(profile),
-            "bars": len(bars), "depth": max(s["height"] for s in segs), "segments": segs,
-            "usage": {"samples_billed": max(samples, 10_000), "cost_usd": round(max(samples, 10_000) * 2e-6, 6)},
-            "mock": "FAKE segments: four children per parent"}
+def usage(n: int) -> dict:
+    billed = max(n, 10_000)
+    return {"samples_billed": billed, "cost_usd": round(billed * 2e-6, 6)}
 
 
-def append_seq(stream: dict, sequence, bar: list) -> dict:
-    """Apply a bar by sequence: a repeat returns the first answer, a gap is refused."""
-    if not isinstance(sequence, int) or sequence < 1:
-        raise invalid("`sequence` is an integer from 1.", "invalid_request")
-    if sequence in stream["answers"]:
-        return stream["answers"][sequence]
-    expected = len(stream["bars"]) + 1
-    if sequence != expected:
-        e = ApiError(409, "conflict_error", "sequence_gap", f"Expected sequence {expected}.")
-        e.expected_sequence = expected
-        raise e
-    out = append(stream, bar)
-    out["sequence"] = sequence
-    stream["answers"][sequence] = out
-    if len(stream["answers"]) > 1000:  # the mock keeps the last thousand answers
-        stream["answers"].pop(min(stream["answers"]))
+def segmentation(account: str, series: str, profile: str | None, bars: list, return_edge: bool, raw: bytes) -> dict:
+    version = profile_version(profile)
+    tree = Tree()
+    closed = tree.extend(bars)
+    segments = sorted(closed + tree.right_edge(), key=lambda s: (-s["height"], s["open_time"]))
+    out = {"object": "segmentation", "id": "seg_" + hashlib.sha256(raw).hexdigest()[:12], "series": series,
+           "profile_version": version, "bars": len(bars), "depth": max(s["height"] for s in segments),
+           "segments": segments, "usage": usage(len(bars)), "mock": "FAKE segments: four children per parent"}
+    if return_edge:
+        out["edge"] = seal(account, series, version, tree)
+        out["edge_last_close_time"] = tree.last_close
     return out
 
 
-def append(stream: dict, bar: list) -> dict:
-    if not (isinstance(bar, list) and len(bar) == 6):
-        raise invalid("`bar` is [open_time, close_time, open, high, low, close].")
-    before = {s["height"]: s for s in right_edge(fake_tree(stream["bars"]))} if stream["bars"] else {}
-    if stream["bars"] and bar[0] <= stream["bars"][-1][1]:
-        raise ApiError(409, "conflict_error", "out_of_order",
-                       "The bar opens before the stream's last bar closed. The stream is unchanged.")
-    check_bars(stream["bars"][-1:] + [bar] if stream["bars"] else [bar])
-    stream["bars"].append(bar)
-    after = right_edge(fake_tree(stream["bars"]))
-    events, outcome = [], "started" if len(stream["bars"]) <= 2 else "extended"
-    child = {"id": f"h0@{int(bar[0])}", "parent": after[0]["id"] if after else None, "height": 0, "order": 0,
-             "bars": 1, "open_time": bar[0], "open": bar[2], "high_time": (bar[0] + bar[1]) // 2, "high": bar[3],
-             "low_time": (bar[0] + bar[1]) // 2, "low": bar[4], "close_time": bar[1], "close": bar[5],
-             "provisional": False}
-    if len(stream["bars"]) > 2:
-        for node in after:
-            prev = before.get(node["height"])
-            if prev and prev["id"] != node["id"]:
-                events.append({"kind": "segmented", "level": node["height"] - 1,
-                               "node": {**prev, "provisional": False}, "child": child})
-                outcome = "segmented"
-            else:
-                events.append({"kind": "extended", "level": node["height"] - 1, "node": node, "child": child})
-            child = node
-    return {"object": "observation_result", "stream_id": stream["id"], "series": stream["series"],
-            "profile_version": stream["profile_version"],
-            "bars": len(stream["bars"]), "outcome": outcome, "events": events, "right_edge": after}
+def extension(account: str, item: dict, unit_default: str = "ms") -> dict:
+    series = item.get("series")
+    if not isinstance(series, str) or not 0 < len(series) <= 200:
+        raise invalid("`series` is required, at most 200 characters.", "invalid_request")
+    unit = item.get("time_unit", unit_default)
+    bars = to_ms(item.get("bars"), unit)
+    if item.get("edge"):
+        tree, version = unseal(item["edge"], account, series, profile_version(item["profile"]) if item.get("profile") else None)
+        check_bars(bars, after=tree.last_close)
+        started = False
+    else:
+        version, tree, started = profile_version(item.get("profile")), Tree(), True
+        check_bars(bars)
+    closed = tree.extend(bars)
+    out = {"object": "extension", "series": series, "profile_version": version, "time_unit": unit, "bars": tree.bars,
+           "outcome": "started" if started else ("segmented" if closed else "extended"),
+           "closed": sorted(closed, key=lambda s: (s["height"], s["open_time"])), "right_edge": tree.right_edge(),
+           "edge": seal(account, series, version, tree), "edge_last_close_time": tree.last_close,
+           "usage": usage(len(bars))}
+    return times_out(out, unit)
 
 
 # Webhooks ----------------------------------------------------------------------------
@@ -284,14 +330,14 @@ class Handler(BaseHTTPRequestHandler):
         if os.environ.get("PATTERNODE_MOCK_QUIET") != "1":
             super().log_message(fmt, *args)
 
-    def _send(self, status: int, body: dict | None, headers: dict | None = None):
-        raw = b"" if body is None else json.dumps(body).encode()
+    def _send(self, status: int, body: dict | None, headers: dict | None = None, raw: bytes | None = None):
+        raw = raw if raw is not None else (b"" if body is None else json.dumps(body).encode())
         self.send_response(status)
         self.send_header("content-type", "application/json")
         self.send_header("request-id", (body or {}).get("request_id") or new_id("req_"))
         self.send_header("ratelimit-policy", '"default";q=300;w=60')
         self.send_header("ratelimit", '"default";r=299;t=60')
-        self.send_header("server-timing", 'app;dur=1')
+        self.send_header("server-timing", "app;dur=1")
         if self.headers.get("traceparent"):
             self.send_header("traceparent", self.headers["traceparent"])
         for k, v in (headers or {}).items():
@@ -307,8 +353,8 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(401, "authentication_error", "missing_api_key" if not key else "invalid_api_key",
                            "Send a key as `Authorization: Bearer pnk_...`.")
         kind = key.split("_")[1]
-        scopes = PRESETS["admin"] if kind == "admin" else PRESETS["full"]
-        return {"key": key, "kind": kind, "scopes": scopes}
+        return {"key": key, "kind": kind, "scopes": PRESETS["admin"] if kind == "admin" else PRESETS["full"],
+                "account": "acct_mock"}
 
     def _body(self) -> dict:
         raw = self.rfile.read(int(self.headers.get("content-length") or 0))
@@ -330,11 +376,19 @@ class Handler(BaseHTTPRequestHandler):
         if scope not in ident["scopes"]:
             raise ApiError(403, "permission_error", "missing_scope", f"This key lacks `{scope}`.")
 
+    def _live(self, ident: dict):
+        if ident["kind"] == "test":
+            raise ApiError(403, "permission_error", "test_key_demo_only",
+                           'Test keys run only on demonstration series. Send {"demo": "walk"}.')
+
     def do_GET(self):
         self._route("GET")
 
     def do_POST(self):
         self._route("POST")
+
+    def do_PUT(self):
+        self._route("PUT")
 
     def do_PATCH(self):
         self._route("PATCH")
@@ -345,125 +399,71 @@ class Handler(BaseHTTPRequestHandler):
     def _route(self, method: str):
         path = urlparse(self.path).path.rstrip("/")
         try:
-            if method == "POST" and path.startswith("/_upload/"):
-                return self._upload_file(path.split("/")[-1])
-            if method == "GET" and path.startswith("/_results/"):  # a signed link in production: no key
-                job = STATE["jobs"].get(path.split("/")[-1])
-                if not job or "result" not in job:
-                    raise ApiError(404, "not_found_error", "not_found", "No result.")
-                return self._send(200, job["result"])
+            if path.startswith("/_bucket/"):  # a stand-in for the partner's own storage, no key
+                return self._bucket(method, path[len("/_bucket/"):])
             ident = self._identity()
             body = self._body() if method in ("POST", "PATCH") else {}
             idem = self.headers.get("idempotency-key")
             if idem and method == "POST":
+                digest = hashlib.sha256(self._raw).hexdigest()
                 with LOCK:
-                    seen = STATE["idem"].get(idem)
-                if seen:
-                    if seen[0] != hashlib.sha256(self._raw).hexdigest():
-                        raise ApiError(422, "invalid_request_error", "idempotency_conflict",
-                                       "This Idempotency-Key was used with a different body.")
-                    return self._send(*seen[1:])
+                    seen = STATE["idem"].setdefault(idem, digest)
+                if seen != digest:
+                    raise ApiError(422, "invalid_request_error", "idempotency_conflict",
+                                   "This Idempotency-Key was used with a different body.")
             status, out, headers = self._dispatch(method, path, ident, body)
-            if idem and method == "POST":
-                with LOCK:
-                    STATE["idem"][idem] = (hashlib.sha256(self._raw).hexdigest(), status, out, headers)
             self._send(status, out, headers)
         except ApiError as e:
             self._send(e.status, e.body(), {"retry-after": "1"} if e.status == 429 else None)
 
     def _dispatch(self, m: str, p: str, ident: dict, body: dict):
+        acct = ident["account"]
         if m == "GET" and p == "/v1/whoami":
             return 200, {"object": "key", "id": "key_mock", "kind": ident["kind"], "name": "mock",
-                         "scopes": ident["scopes"], "account": "acct_mock", "tier": "evaluation",
-                         "expires_at": None}, None
+                         "scopes": ident["scopes"], "account": acct, "tier": "evaluation", "expires_at": None}, None
         if m == "POST" and p == "/v1/segmentations":
             self._need(ident, "segment:run")
             if "demo" in body:
                 if body["demo"] not in DEMO:
                     raise invalid("Demonstration series are: walk, sensor.", "invalid_request")
-                out = segmentation(f"demo/{body['demo']}", "standard", DEMO[body["demo"]])
+                out = segmentation(acct, f"demo/{body['demo']}", "standard", DEMO[body["demo"]], False, self._raw)
                 out["usage"] = {"samples_billed": 0, "cost_usd": 0.0}
                 return 200, out, None
-            if ident["kind"] == "test":
-                raise ApiError(403, "permission_error", "test_key_demo_only",
-                               'Test keys run only on demonstration series. Send {"demo": "walk"}.')
+            self._live(ident)
             series = self._series(body)
             unit = body.get("time_unit", "ms")
             bars = check_bars(to_ms(body["bars"], unit)) if "bars" in body \
                 else bars_from_samples(to_ms(body.get("samples"), unit))
-            out = segmentation(series, body.get("profile", "standard"), bars)
+            out = segmentation(acct, series, body.get("profile"), bars, bool(body.get("return_edge")), self._raw)
             out["time_unit"] = unit
             return 200, times_out(out, unit), None
-        if m == "POST" and p == "/v1/uploads":
-            self._need(ident, "series:write")
-            if body.get("format") not in ("csv", "jsonl"):
-                raise invalid("`format` must be csv or jsonl.", "invalid_request")
-            uid = new_id("upl_")
-            host = self.headers.get("host", "localhost:4010")
-            with LOCK:
-                STATE["uploads"][uid] = {"format": body["format"], "data": None}
-            return 201, {"object": "upload", "id": uid, "url": f"http://{host}/_upload/{uid}",
-                         "fields": {"key": uid}, "max_bytes": body.get("size_bytes", 100_000_000),
-                         "expires_at": iso(time.time() + 3600)}, None
+        if m == "POST" and p == "/v1/segmentations/extend":
+            self._need(ident, "segment:run")
+            self._live(ident)
+            return 200, extension(acct, body), None
+        if m == "POST" and p == "/v1/segmentations/extend/batch":
+            self._need(ident, "segment:run")
+            self._live(ident)
+            items = body.get("items")
+            if not isinstance(items, list) or not 0 < len(items) <= 1000:
+                raise invalid("`items` holds 1 to 1000 extensions.", "invalid_request")
+            results = []
+            for item in items:
+                try:
+                    results.append({"status": 200, "result": extension(acct, item, body.get("time_unit", "ms"))})
+                except ApiError as e:
+                    results.append({"status": e.status, "error": e.body()})
+            return 200, {"object": "extension_batch", "results": results}, None
         if m == "POST" and p == "/v1/segmentations/jobs":
             self._need(ident, "segment:run")
+            self._live(ident)
             return self._job(ident, body)
         if m == "GET" and (mm := re.fullmatch(r"/v1/segmentations/jobs/(job_\w+)", p)):
             self._need(ident, "segment:read")
             job = STATE["jobs"].get(mm.group(1))
             if not job:
                 raise ApiError(404, "not_found_error", "not_found", "No such job.")
-            return 200, {k: v for k, v in job.items() if k != "result"}, None
-        if m == "POST" and p == "/v1/streams":
-            self._need(ident, "stream:write")
-            if ident["kind"] == "test":
-                raise ApiError(403, "permission_error", "test_key_demo_only", "Test keys cannot open streams.")
-            unit = body.get("time_unit", "ms")
-            stream = {"id": new_id("str_"), "series": self._series(body), "unit": unit,
-                      "profile_version": profile_version(body.get("profile")),
-                      "bars": [], "answers": {}, "created_at": iso()}
-            out = append_seq(stream, 1, to_ms([body.get("bar")], unit)[0])
-            with LOCK:
-                STATE["streams"][stream["id"]] = stream
-            return 201, times_out(out, unit), None
-        if m == "POST" and p == "/v1/streams/observations":
-            self._need(ident, "stream:write")
-            items = body.get("observations")
-            if not isinstance(items, list) or not 0 < len(items) <= 1000:
-                raise invalid("`observations` holds 1 to 1000 items.", "invalid_request")
-            results = []
-            for item in items:
-                try:
-                    stream = STATE["streams"].get(item.get("stream_id"))
-                    if not stream:
-                        raise ApiError(404, "not_found_error", "not_found", "No such stream.")
-                    with LOCK:
-                        r = append_seq(stream, item.get("sequence"),
-                                       to_ms([item.get("bar")], body.get("time_unit", stream["unit"]))[0])
-                    results.append({"status": 200, "result": times_out(r, stream["unit"])})
-                except ApiError as e:
-                    results.append({"status": e.status, "error": e.body()})
-            return 200, {"object": "observation_batch_result", "results": results}, None
-        if m == "GET" and p == "/v1/streams":
-            self._need(ident, "stream:read")
-            return 200, {"object": "list", "has_more": False,
-                         "data": [self._stream_view(st) for st in STATE["streams"].values()]}, None
-        if mm := re.fullmatch(r"/v1/streams/(str_\w+)(/observations)?", p):
-            stream = STATE["streams"].get(mm.group(1))
-            if not stream:
-                raise ApiError(404, "not_found_error", "not_found", "No such stream.")
-            if m == "POST" and mm.group(2):
-                self._need(ident, "stream:write")
-                unit = body.get("time_unit", stream["unit"])
-                with LOCK:
-                    out = append_seq(stream, body.get("sequence"), to_ms([body.get("bar")], unit)[0])
-                return 200, times_out(out, stream["unit"]), None
-            if m == "GET" and not mm.group(2):
-                return 200, self._stream_view(stream), None
-            if m == "DELETE" and not mm.group(2):
-                with LOCK:
-                    del STATE["streams"][stream["id"]]
-                return 204, None, None
+            return 200, job, None
         if p == "/v1/keys" and m == "POST":
             self._need(ident, "keys:manage")
             kind = body.get("kind", "live")
@@ -490,7 +490,7 @@ class Handler(BaseHTTPRequestHandler):
             if m == "PATCH":
                 self._need(ident, "keys:manage")
                 STATE["account"].update({k: body[k] for k in ("webhook_url", "spend_limit_usd") if k in body})
-            return 200, {"object": "account", "id": "acct_mock", "tier": "evaluation", "balance_usd": 20.0,
+            return 200, {"object": "account", "id": acct, "tier": "evaluation", "balance_usd": 20.0,
                          "terms_accepted_at": iso(0), **STATE["account"]}, None
         if m == "POST" and p == "/v1/account/webhook_secret":
             self._need(ident, "keys:manage")
@@ -498,56 +498,58 @@ class Handler(BaseHTTPRequestHandler):
                          "note": "The mock does not sign with this; set PATTERNODE_MOCK_WEBHOOK_SECRET."}, None
         raise ApiError(404, "not_found_error", "not_found", f"No route {m} {p} in the mock.")
 
-    def _stream_view(self, st: dict) -> dict:
-        last = st["bars"][-1][1] if st["bars"] else None
-        scale = {"ms": 1, "us": 1_000, "ns": 1_000_000}[st["unit"]]
-        return times_out({"object": "stream", "id": st["id"], "series": st["series"],
-                          "profile_version": st["profile_version"], "last_sequence": len(st["bars"]),
-                          "bars": len(st["bars"]), "right_edge": right_edge(fake_tree(st["bars"])),
-                          "created_at": st["created_at"],
-                          "last_bar_at": iso(last / scale / 1000) if last is not None else None}, st["unit"])
-
     def _series(self, body: dict) -> str:
         s = body.get("series")
         if not isinstance(s, str) or not 0 < len(s) <= 200:
             raise invalid("`series` is required, at most 200 characters.", "invalid_request")
         return s
 
-    def _upload_file(self, uid: str):
-        raw = self.rfile.read(int(self.headers.get("content-length") or 0))
-        if uid not in STATE["uploads"]:
-            return self._send(404, None)
-        STATE["uploads"][uid]["data"] = raw
-        self._send(204, None)
+    def _bucket(self, method: str, key: str):
+        if method == "PUT":
+            data = self.rfile.read(int(self.headers.get("content-length") or 0))
+            with LOCK:
+                STATE["bucket"][key] = data
+            return self._send(200, None, raw=b"")
+        if method == "GET" and key in STATE["bucket"]:
+            return self._send(200, None, raw=STATE["bucket"][key])
+        return self._send(404, None, raw=b"")
 
     def _job(self, ident: dict, body: dict):
-        up = STATE["uploads"].get(body.get("upload_id"))
-        if not up or up["data"] is None:
-            raise invalid("No such upload, or nothing was uploaded to it.", "invalid_request")
         series = self._series(body)
+        for f in ("source_url", "result_url"):
+            if not isinstance(body.get(f), str) or not body[f].startswith(("https://", "http://127.0.0.1", "http://localhost")):
+                raise invalid(f"`{f}` must be an https link to your storage.", "invalid_request")
+        if body.get("format") not in ("csv", "jsonl", "parquet", "arrow"):
+            raise invalid("`format` is csv, jsonl, parquet or arrow.", "invalid_request")
+        if body["format"] in ("parquet", "arrow"):
+            raise invalid("The mock reads csv and jsonl only; the service reads all four.", "invalid_request")
         job = {"object": "segmentation_job", "id": new_id("job_"), "status": "running", "series": series,
-               "created_at": iso(), "finished_at": None, "result_url": None, "usage": None, "error": None}
-        host = self.headers.get("host", "localhost:4010")
+               "created_at": iso(), "finished_at": None, "result_written": False, "usage": None, "error": None}
         STATE["jobs"][job["id"]] = job
         webhook = body.get("webhook_url") or STATE["account"]["webhook_url"]
+        acct = ident["account"]
 
         def run():
             try:
-                text = up["data"].decode()
-                if b"\r\n\r\n" in up["data"]:  # a multipart form: take the file part
-                    text = text.split("\r\n\r\n", 2)[-1].rsplit("\r\n--", 1)[0]
-                rows = [json.loads(line) for line in text.splitlines() if line.strip()] if up["format"] == "jsonl" \
+                text = urllib.request.urlopen(body["source_url"], timeout=60).read().decode()
+                rows = [json.loads(line) for line in text.splitlines() if line.strip()] if body["format"] == "jsonl" \
                     else [[float(x) for x in line.split(",")] for line in text.splitlines()[1:] if line.strip()]
                 bars = check_bars(rows) if body.get("kind") == "bars" else bars_from_samples(rows)
-                job["result"] = segmentation(series, body.get("profile", "standard"), bars)
-                job.update(status="succeeded", result_url=f"http://{host}/_results/{job['id']}",
-                           usage=job["result"]["usage"])
+                result = segmentation(acct, series, body.get("profile"), bars, bool(body.get("return_edge")),
+                                      json.dumps(body, sort_keys=True).encode())
+                req = urllib.request.Request(body["result_url"], data=json.dumps(result).encode(), method="PUT",
+                                             headers={"content-type": "application/json"})
+                urllib.request.urlopen(req, timeout=60).read()
+                job.update(status="succeeded", result_written=True, usage=result["usage"])
             except ApiError as e:
                 job.update(status="failed", error=e.body()["error"])
+            except Exception as e:
+                job.update(status="failed", error={"type": "api_error", "message": f"The job failed: {e}. It was not charged.",
+                                                   "details": {"error_code": "internal"}})
             job["finished_at"] = iso()
             if webhook:
-                event = {"type": f"segmentation.job.{job['status']}", "created_at": iso(),
-                         "data": {k: v for k, v in job.items() if k != "result"}}
+                event = {"id": "evt_" + job["id"][4:], "type": f"segmentation.job.{job['status']}",
+                         "created_at": iso(), "data": dict(job)}
                 deliver(webhook, event, f"msg_{job['id']}")
 
         threading.Timer(0.2, run).start()
@@ -561,5 +563,5 @@ def serve(port: int | None = None) -> ThreadingHTTPServer:
 
 if __name__ == "__main__":
     srv = serve()
-    print(f"Patternode mock on http://127.0.0.1:{srv.server_address[1]} (FAKE segments)")
+    print(f"Patternode mock on http://127.0.0.1:{srv.server_address[1]} (FAKE segments; keeps no series)")
     srv.serve_forever()

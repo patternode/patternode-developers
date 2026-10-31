@@ -1,42 +1,39 @@
-"""Pattern 2, a forming series: send each bar as it closes, and act on what it did. Preview.
+"""Pattern 2, a forming series: send the edge with each new bar, store what comes back. Preview.
 
     PATTERNODE_API_KEY=pnk_live_... python examples/python/forming_series.py examples/data/export-kw.json
 
-Keep the stream_id and the last sequence with the series in your own store. Each bar carries
-its sequence: a repeat (a retry) returns the first answer and applies nothing, and a gap is
-refused with 409 sequence_gap naming the sequence to send. Either way the stream is unchanged.
+Patternode keeps nothing between calls. Each answer carries the series' edge, a sealed token;
+SegmentStore keeps it with the segments and sends it back with the next bars. A retry with
+the same edge and bars gives the same answer, so a timeout is safe to retry.
 """
 
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 from patternode_client import Patternode, PatternodeError
+from segment_store import SegmentStore
 
 
 def main(path: str) -> None:
     bars = json.loads(Path(path).read_text())
     pn = Patternode()
-    first = pn.post("/v1/streams", {"series": "exu/demo/forming/ac-power", "bar": bars[0]})
-    stream_id = first["stream_id"]
-    print(f"opened {stream_id}")
-    sequence = 1  # the opening bar
-    for bar in bars[1:]:
+    store = SegmentStore(Path(tempfile.mkdtemp()) / "example-utility")   # in production: your store, per client
+    series = "exu/demo/forming/ac-power"
+    for bar in bars:                                                       # as each bar closes
         try:
-            r = pn.post(f"/v1/streams/{stream_id}/observations", {"sequence": sequence + 1, "bar": bar})
+            r = store.extend(pn, series, [bar], profile="standard@2026-11")
         except PatternodeError as e:
-            if e.code == "out_of_order":  # a late bar: nothing was applied, so its sequence is free
+            if e.code == "out_of_order":   # a late bar: nothing was applied, the edge is unchanged
                 print(f"skipped a bar at {bar[0]}: out of order")
                 continue
             raise
-        sequence = r["sequence"]
-        closed = [ev for ev in r["events"] if ev["kind"] == "segmented"]
-        for ev in closed:  # a segment is final: store it, redraw, notify
-            print(f"bar {r['bars']}: level {ev['level'] + 1} closed {ev['node']['id']} "
-                  f"({ev['node']['open']} -> {ev['node']['close']})")
-    edge = pn.get(f"/v1/streams/{stream_id}")["right_edge"]
-    print("open at each level:", ", ".join(s["id"] for s in edge))
-    pn.delete(f"/v1/streams/{stream_id}")
+        for s in r["closed"]:              # final: redraw, notify
+            print(f"bar {r['bars']}: level {s['height']} closed {s['id']} ({s['open']} -> {s['close']})")
+    edge = store.edge(series)
+    print(f"open at each level: {', '.join(s['id'] for s in store.right_edge(series))}")
+    print(f"trend: {store.trend(series)}; edge {len(edge.token)} bytes, next bar after {edge.last_close_time}")
 
 
 if __name__ == "__main__":
