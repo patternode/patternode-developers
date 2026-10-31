@@ -2,7 +2,7 @@
 title: Patternode for developers
 slug: /
 sidebar_position: 0
-description: Integrate with Patternode's products. Delve first, formerly Mosaic, the shards toolkit.
+description: Integrate with Patternode's products. Delve first, the shards toolkit.
 ---
 
 # Patternode for developers
@@ -13,7 +13,7 @@ Everything you, or your coding agent, need to integrate with Patternode: how the
 
 | Product | What it is | Status |
 |---|---|---|
-| Delve | The shards toolkit. A time series in; its segments at every level out, for galleries, single views, live tiles and search. Formerly Mosaic | Available. The forming-series routes are in preview |
+| Delve | The shards toolkit. A time series in; its segments at every level out, for galleries, single views, live tiles and search. | Available. The forming-series routes are in preview |
 | Essence | Patterns by precedent: what repeats. Runs on Delve | Planned |
 | Sentinel | Anomalies by shape: what moves, and the alarm on it. Runs on Delve | Planned |
 | Foresight | Forecasting: what comes next. Runs on Delve | Planned |
