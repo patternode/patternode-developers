@@ -45,3 +45,120 @@
 table {
   font-size: 0.92rem;
 }
+
+/* Chrome: the navbar and footer sit on the navy ground in both themes, as the brand's tile does. */
+@import '@fontsource/ibm-plex-sans/500.css';
+
+:root {
+  --ifm-navbar-background-color: var(--pn-brand-navy);
+  --ifm-navbar-link-color: #d6dbe6;
+  --ifm-navbar-link-hover-color: #ffffff;
+  --ifm-navbar-shadow: none;
+  --ifm-footer-background-color: var(--pn-brand-navy);
+  --ifm-heading-font-weight: 600;
+  --ifm-h1-font-size: 2.4rem;
+  --ifm-code-background: var(--pn-surface-raised);
+  --ifm-toc-border-color: var(--pn-border);
+  --ifm-hr-border-color: var(--pn-border);
+}
+
+.navbar {
+  border-bottom: 1px solid rgba(0, 184, 230, 0.35);
+}
+
+.navbar .navbar__title,
+.navbar .navbar__link {
+  color: #e6eaf2;
+}
+
+.navbar .navbar__link--active,
+.navbar .navbar__link:hover {
+  color: var(--pn-brand-cyan);
+}
+
+.navbar__toggle,
+.navbar .clean-btn {
+  color: #e6eaf2;
+}
+
+.navbar .DocSearch-Button,
+.navbar [class*='searchBox'] input {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e6eaf2;
+}
+
+.footer--dark {
+  border-top: 1px solid rgba(0, 184, 230, 0.35);
+}
+
+/* Headings and text: precise, not editorial. */
+h1, h2, h3 {
+  letter-spacing: -0.01em;
+}
+
+.markdown h1:first-child {
+  font-size: 2.3rem;
+}
+
+.markdown h2 {
+  margin-top: 2.6rem;
+  padding-top: 0.2rem;
+}
+
+.markdown > h2::before {
+  content: '';
+  display: block;
+  width: 2.2rem;
+  height: 2px;
+  background: var(--pn-brand-cyan);
+  margin-bottom: 0.8rem;
+}
+
+code {
+  font-variant-numeric: tabular-nums;
+}
+
+table {
+  font-variant-numeric: tabular-nums;
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table thead tr {
+  border-bottom: 2px solid var(--pn-border);
+}
+
+table th {
+  background: var(--pn-surface-raised);
+  text-align: left;
+  font-weight: 600;
+}
+
+table tr:nth-child(2n) {
+  background: transparent;
+}
+
+table td,
+table th {
+  border: none;
+  border-bottom: 1px solid var(--pn-border);
+}
+
+/* Diagrams on pages: framed like an instrument panel, and open full size on click. */
+.markdown a > img[src$='.svg'] {
+  border-radius: var(--pn-radius-lg);
+  border: 1px solid var(--pn-border);
+  box-shadow: 0 14px 30px rgba(27, 32, 44, 0.08);
+}
+
+/* Sidebar */
+.menu__link--active:not(.menu__link--sublist) {
+  background: var(--pn-surface-raised);
+  box-shadow: inset 2px 0 0 var(--ifm-color-primary);
+}
+
+/* Admonitions in the brand roles. */
+.alert--info {
+  --ifm-alert-border-color: var(--pn-primary-600);
+}

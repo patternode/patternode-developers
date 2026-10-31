@@ -1,6 +1,7 @@
 ---
-title: Patternode for developers
-slug: /
+title: Overview
+sidebar_label: Overview
+slug: /overview
 sidebar_position: 0
 description: Integrate with Patternode's products. Delve first, the shards toolkit.
 ---

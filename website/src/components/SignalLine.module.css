@@ -1,0 +1,45 @@
+.svg {
+  position: absolute;
+  inset: auto 0 0 0;
+  width: 100%;
+  height: 34%;
+  pointer-events: none;
+}
+
+.grid {
+  stroke: rgba(155, 166, 192, 0.12);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.line {
+  fill: none;
+  stroke: var(--pn-brand-cyan);
+  stroke-width: 2.5;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 1.6s ease-out forwards;
+  opacity: 0.7;
+}
+
+.node {
+  fill: #ffffff;
+  stroke: var(--pn-brand-cyan);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+  animation: appear 0.4s ease-out forwards;
+}
+
+@keyframes draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes appear {
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .line { animation: none; stroke-dashoffset: 0; }
+  .node { animation: none; opacity: 1; }
+}
