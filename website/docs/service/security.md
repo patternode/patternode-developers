@@ -26,11 +26,11 @@ Whatever the method, the scopes are the same.
 
 ## Encryption
 
-Data is encrypted in transit and at rest. On Mission Critical and Dedicated you MAY hold the key: Patternode encrypts your checkpoints, uploads and job results with a key in your own cloud KMS, and revoking it makes them unreadable, which is also a way to end the service.
+Data is encrypted in transit and at rest. On Mission Critical and Dedicated you MAY hold the key: Patternode keeps none of your series, so there is nothing of yours at rest to encrypt; your key seals your edges instead, so revoking it makes every edge unreadable to Patternode, which is also a way to end the service.
 
 ## Audit
 
-`GET /v1/audit_events` lists every change to your account and keys, and every sign-in and support access, with actor, time, source address and request id, kept for 7 years. It streams to your security tooling as events (`audit.*`) on Mission Critical and Dedicated.
+`GET /v1/audit_events` lists every change to your account and keys, and every sign-in and support access, with actor, time, source address and request id, kept for 7 years. It reaches your security tooling as events (`audit.*`) on Mission Critical and Dedicated.
 
 Patternode staff MUST NOT access your series. Support access to your account's metadata is logged and shown to you.
 

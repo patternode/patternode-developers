@@ -1,7 +1,7 @@
 ---
 title: Forming series
 sidebar_position: 3
-description: Append each bar as it closes and act on each segment as it closes. Preview.
+description: Send the edge with each new bar, store what comes back. Patternode keeps nothing between calls.
 ---
 
 import CodeBlock from '@theme/CodeBlock';
@@ -10,35 +10,44 @@ import src from '!!raw-loader!@examples/python/forming_series.py';
 # Forming series
 
 :::info Preview
-These routes work and may change with 30 days' notice. Do not build production alarms on them yet.
+This route works and may change with 30 days' notice. Do not build production alarms on it yet.
 :::
+
+Patternode keeps nothing between calls, not even for a series that is still forming. The series carries itself: each answer returns its edge, a sealed token holding the open right edge of every level. You store the edge with the segments, and send it back with the next bars.
 
 ```mermaid
 sequenceDiagram
   participant I as Your ingest workload
+  participant S as Your segment store
   participant P as Patternode
-  participant S as Your store
-  I->>P: POST /v1/streams {series, bar}
-  P-->>I: stream_id, outcome: started
+  I->>P: POST /v1/segmentations/extend {series, profile, bars} (no edge: a new series)
+  P-->>I: closed, right_edge, edge
+  I->>S: store closed (final), replace the right edge, store the edge
   loop each bar as it closes
-    I->>P: POST /v1/streams/{id}/observations {bar}
-    P-->>I: outcome, events, right_edge
-    I->>S: Store closed segments; replace the right edge
+    I->>S: read the edge
+    I->>P: POST /v1/segmentations/extend {series, edge, bars}
+    P-->>I: closed, right_edge, a new edge
+    I->>S: store all three together
   end
-  I->>P: DELETE /v1/streams/{id} (when the series ends)
 ```
 
-| `outcome` | Means | Do |
+| In the answer | Means | Do |
 |---|---|---|
-| `started` | The first two bars | Store the right edge |
-| `extended` | No level closed | Replace the right edge |
-| `segmented` | One or more levels closed a segment | Store each `node` of a `segmented` event as final; replace the right edge; redraw; notify |
+| `closed` | Segments these bars closed, now final | Store them; they never change |
+| `right_edge` | The open segment at each level, provisional | Replace the previous right edge with it |
+| `edge` | The series' state, sealed by Patternode | Store it as it is; send it back with the next bars |
+| `edge_last_close_time` | When the last bar closed | The next bars must open after it |
+| `outcome` | `started`, `extended` or `segmented` | Redraw when `segmented` |
 
 Rules:
 
-- One writer per stream. Send bars in order; a bar that opens before the last one closed is refused with 409 `out_of_order` and the stream is unchanged.
-- Keep `stream_id` with the series in your store. If you lose it, open a new stream and resend from the last final segment's close.
-- If an append times out, resend it with the same `Idempotency-Key`: it will not be applied twice.
-- Close streams you no longer need, which deletes their checkpoint.
+- The edge is sealed: encrypted and signed, bound to your account, the series and the profile version. It is no use to anyone else, and a changed edge is refused (400 `edge_invalid`); an edge sent for another series is refused (409 `edge_mismatch`).
+- Bars must open after the edge's last bar closed; otherwise 409 `out_of_order`, and nothing is applied.
+- The same edge with the same bars always gives the same answer. A timeout is safe to retry: resend the request you sent.
+- Store the closed segments, the right edge and the edge together, in one write. One writer per series: if two writers extend from the same edge, keep the first write (a version check, as [the segment store](segment-store.mdx) does).
+- A finished series can become a forming one: ask `POST /v1/segmentations` for `return_edge: true` and carry on from that edge.
+- Many series at once: `POST /v1/segmentations/extend/batch` takes up to 1,000 items, each with its own edge.
+
+Extending a series bar by bar, in any pieces, gives the same segments as sending all its bars as one finished series.
 
 <CodeBlock language="python" title="examples/python/forming_series.py">{src}</CodeBlock>

@@ -19,16 +19,18 @@ info:
     Answer with any 2xx within 10 seconds. Anything else is retried, with backoff, three
     times. Do the work after you answer, not before.
 
-    The same events reach you three ways, with the same `id`, `type` and `data`:
+    Events tell you about work that finishes after the call that started it (jobs) and
+    about your account. Segments are never sent as events: every segmentation answers in
+    its own response, and Patternode keeps nothing to send later.
+
+    The same events reach you two ways, with the same `id`, `type` and `data`:
 
     | Channel | Plans | Delivery |
     |---|---|---|
     | `webhook`, an HTTPS POST to your endpoint | Production and above | At least once, retried 24 hours (72 on Mission Critical) |
-    | `subscription`, a WebSocket you hold open | Mission Critical, Dedicated | At least once, in stream sequence order, resumable for 7 days |
     | Your event bus (Amazon EventBridge partner source, Kafka topic) | Mission Critical, Dedicated | At least once, as CloudEvents 1.0 structured JSON |
 
-    Every event has a stable `id` (deduplicate on it) and, for stream events, the stream's
-    `sequence` (order on it). Each message carries `x-status` with the same meaning as in
+    Every event has a stable `id`: deduplicate on it. Each message carries `x-status` with the same meaning as in
     the OpenAPI document.
   contact:
     name: Patternode partner support
@@ -47,21 +49,6 @@ servers:
     security:
       - $ref: "#/components/securitySchemes/standardWebhooks"
 
-  subscription:
-    host: "{jurisdiction}.api.patternode.com"
-    pathname: /v1/subscribe
-    protocol: wss
-    description: |
-      Patternode's subscription endpoint. Authenticate with the same key or token, in the
-      Authorization header of the upgrade request. Send `subscribe` to choose streams and
-      event types, and `from` to resume. Patternode sends a `heartbeat` every 15 seconds.
-    variables:
-      jurisdiction:
-        enum: [anz, eu, us]
-        default: us
-    security:
-      - $ref: "#/components/securitySchemes/bearer"
-
 channels:
   webhook:
     address: /patternode
@@ -69,42 +56,10 @@ channels:
     messages:
       jobSucceeded: { $ref: "#/components/messages/jobSucceeded" }
       jobFailed: { $ref: "#/components/messages/jobFailed" }
-      streamSegmented: { $ref: "#/components/messages/streamSegmented" }
       keyExpiring: { $ref: "#/components/messages/keyExpiring" }
       balanceLow: { $ref: "#/components/messages/balanceLow" }
 
-  subscription:
-    address: /v1/subscribe
-    title: Your subscription
-    servers:
-      - $ref: "#/servers/subscription"
-    messages:
-      subscribe: { $ref: "#/components/messages/subscribe" }
-      ack: { $ref: "#/components/messages/ack" }
-      streamSegmented: { $ref: "#/components/messages/streamSegmented" }
-      jobSucceeded: { $ref: "#/components/messages/jobSucceeded" }
-      jobFailed: { $ref: "#/components/messages/jobFailed" }
-      lag: { $ref: "#/components/messages/lag" }
-      heartbeat: { $ref: "#/components/messages/heartbeat" }
-
 operations:
-  acceptSubscription:
-    action: receive
-    title: Patternode takes your choice of streams and types, and where to resume
-    channel: { $ref: "#/channels/subscription" }
-    messages:
-      - $ref: "#/channels/subscription/messages/subscribe"
-      - $ref: "#/channels/subscription/messages/ack"
-  sendSubscriptionEvents:
-    action: send
-    title: Patternode sends events as they happen
-    channel: { $ref: "#/channels/subscription" }
-    messages:
-      - $ref: "#/channels/subscription/messages/streamSegmented"
-      - $ref: "#/channels/subscription/messages/jobSucceeded"
-      - $ref: "#/channels/subscription/messages/jobFailed"
-      - $ref: "#/channels/subscription/messages/lag"
-      - $ref: "#/channels/subscription/messages/heartbeat"
   receiveJobEvents:
     action: send
     title: Patternode tells you a job finished
@@ -112,12 +67,6 @@ operations:
     messages:
       - $ref: "#/channels/webhook/messages/jobSucceeded"
       - $ref: "#/channels/webhook/messages/jobFailed"
-  receiveStreamEvents:
-    action: send
-    title: Patternode tells you a forming series closed a segment
-    channel: { $ref: "#/channels/webhook" }
-    messages:
-      - $ref: "#/channels/webhook/messages/streamSegmented"
   receiveAccountEvents:
     action: send
     title: Patternode tells you about your keys and balance
@@ -157,60 +106,13 @@ components:
         id: { type: string, description: Stable across retries and channels. Deduplicate on it. }
         type: { type: string }
         created_at: { type: string, format: date-time, description: Microsecond precision. }
-        sequence: { type: integer, description: Stream events only. The stream's sequence of the append that caused it. }
         data: { type: object }
 
   messages:
-    subscribe:
-      name: subscribe
-      title: Choose streams and event types; resume from a point
-      x-status: planned
-      payload:
-        type: object
-        required: [action]
-        properties:
-          action: { const: subscribe }
-          types: { type: array, items: { type: string }, examples: [[stream.segmented, segmentation.job.succeeded]] }
-          streams: { type: array, items: { type: string }, description: Stream ids, or omit for all. }
-          min_level: { type: integer, minimum: 1, description: "For stream.segmented, only segments at or above this level." }
-          from: { type: string, description: "An event id to resume after; omitted, from now. Kept 7 days." }
-
-    ack:
-      name: ack
-      title: Acknowledge events up to an id
-      x-status: planned
-      payload:
-        type: object
-        required: [action, up_to]
-        properties:
-          action: { const: ack }
-          up_to: { type: string }
-
-    lag:
-      name: lag
-      title: You are behind; Patternode is buffering for you
-      x-status: planned
-      payload:
-        type: object
-        properties:
-          type: { const: lag }
-          buffered_events: { type: integer }
-          oldest_buffered_at: { type: string, format: date-time }
-
-    heartbeat:
-      name: heartbeat
-      title: Every 15 seconds
-      x-status: planned
-      payload:
-        type: object
-        properties:
-          type: { const: heartbeat }
-          at: { type: string, format: date-time }
-
     jobSucceeded:
       name: segmentation.job.succeeded
       title: A segmentation job succeeded
-      summary: Fetch the result from data.result_url within 24 hours.
+      summary: The result is in your storage, at the result_url you gave.
       x-status: available
       traits: [{ $ref: "#/components/messageTraits/signed" }]
       payload:
@@ -233,7 +135,7 @@ components:
               series: exu/7f3a9c/1b02e4/export-kw
               created_at: "2026-10-30T02:06:10Z"
               finished_at: "2026-10-30T02:06:51Z"
-              result_url: https://results.patternode.com/job_01JBX8F3TA.json?sig=...
+              result_written: true
               usage: { samples_billed: 2190000, cost_usd: 4.38 }
               error: null
 
@@ -251,33 +153,6 @@ components:
           type: { const: segmentation.job.failed }
           created_at: { type: string, format: date-time }
           data: { $ref: "./openapi.yaml#/components/schemas/Job" }
-
-    streamSegmented:
-      name: stream.segmented
-      title: A forming series closed a segment
-      summary: |
-        Sent when an appended bar closes a segment at or above the level you subscribe to,
-        so a backend that does not wait on each append can still react. The synchronous
-        answer to the append carries the same events.
-      x-status: planned
-      traits: [{ $ref: "#/components/messageTraits/signed" }]
-      payload:
-        type: object
-        required: [id, type, sequence, data]
-        properties:
-          id: { type: string }
-          sequence: { type: integer }
-          type: { const: stream.segmented }
-          created_at: { type: string, format: date-time }
-          data:
-            type: object
-            required: [stream_id, series, events]
-            properties:
-              stream_id: { type: string }
-              series: { type: string }
-              events:
-                type: array
-                items: { $ref: "./schemas/series-event.schema.json" }
 
     keyExpiring:
       name: key.expiring

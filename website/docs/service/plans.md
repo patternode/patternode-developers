@@ -26,11 +26,10 @@ A plan's service levels start on the date its order form names. Until a jurisdic
 | For | Building and testing | Products where an outage is an inconvenience | Real-time operations and live trading | The largest utilities and funds; regulated outsourcing |
 | Monthly availability | None | 99.9% | 99.99% | 99.99%, or 99.995% by agreement |
 | Deployment | Shared | Shared, multi-zone, one region | Shared cells, active-active across two regions of your jurisdiction | Single-tenant cells, active-active across two regions, in your jurisdiction |
-| Transports | REST | REST, webhooks | REST, gRPC streams, WebSocket subscriptions, webhooks, event buses | As Mission Critical |
+| Transports | REST | REST, webhooks | REST, gRPC, webhooks, event buses | As Mission Critical |
 | Throughput (bars a second, sustained, per account) | 100 | 5,000 | 100,000 | 1,000,000 or more, sized together |
-| Open streams | 100 | 50,000 | 1,000,000 | By agreement |
 | Append latency, p99, at the edge | None | 50 ms (REST) | 10 ms (gRPC), 40 ms (REST) | 5 ms (gRPC), by agreement |
-| Recovery point (acknowledged data) | None | 5 minutes | 0 within a region; 1 second across regions | 0 within a region; 1 second across regions |
+| Your series' data held by Patternode | None | None | None | None |
 | Recovery time (regional loss) | None | 4 hours | 60 seconds | 60 seconds |
 | Private connectivity | No | No | AWS PrivateLink, Azure Private Link, Google Private Service Connect | As Mission Critical, plus dedicated interconnect |
 | Customer-managed encryption keys | No | No | Yes | Yes |
@@ -39,7 +38,7 @@ A plan's service levels start on the date its order form names. Until a jurisdic
 | Service credits | No | Yes | Yes | Yes, as agreed |
 | Exit assistance | No | Data export | Data export, exit plan | Data export, tested exit plan, transition support |
 
-The throughput and stream figures are what the plan is provisioned for, without asking. Patternode enforces them with the quotas every response reports in `ratelimit-policy` and `ratelimit`, so you can see your headroom before you reach it. Above them, tell Patternode 10 business days ahead and the capacity is added; the service does not refuse traffic within twice the figure while that happens, it slows it with `429` and `retry-after`.
+The throughput figures are what the plan is provisioned for, without asking. Patternode enforces them with the quotas every response reports in `ratelimit-policy` and `ratelimit`, so you can see your headroom before you reach it. Above them, tell Patternode 10 business days ahead and the capacity is added; the service does not refuse traffic within twice the figure while that happens, it slows it with `429` and `retry-after`.
 
 ## Which plan for which grade
 
@@ -49,5 +48,5 @@ The throughput and stream figures are what the plan is provisioned for, without 
 | A control room tool used in real-time operations | Mission Critical | Recovery in a minute, private connectivity, blackout periods during storms |
 | A transmission operator, a large water utility, or anything inside a regulated outsourcing regime | Dedicated | Single tenancy, your change board, a tested exit plan |
 | A research team running backtests | Production, with jobs | Throughput, not tail latency |
-| A live trading desk | Mission Critical | gRPC streams, 10 ms p99, no change during market hours |
+| A live trading desk | Mission Critical | gRPC, 10 ms p99, no change during market hours |
 | A fund at full scale, or one whose regulator treats Patternode as a critical third party | Dedicated | Sized throughput, 5 ms p99, exit plan, your audit rights |

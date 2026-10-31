@@ -12,7 +12,7 @@ Patternode issues you two keys to start: a test key, and an admin key you use on
 
 | Kind | Prefix | Can | Cannot |
 |---|---|---|---|
-| Test | `pnk_test_` | Run the demonstration series (`{"demo": "walk"}`, `{"demo": "sensor"}`); free | Run your own series; open streams |
+| Test | `pnk_test_` | Run the demonstration series (`{"demo": "walk"}`, `{"demo": "sensor"}`); free | Run your own series |
 | Live | `pnk_live_` | Run your own series; billed from your credit | Manage keys or the account |
 | Admin | `pnk_admin_` | Create, disable and delete keys; set limits, the webhook URL and auto-reload; read usage; buy credit | Run anything |
 
@@ -46,20 +46,16 @@ Scopes are fixed when a key is created. A preset is the usual choice.
 
 | Scope | Grants |
 |---|---|
-| `segment:run` | `POST /v1/segmentations`, `POST /v1/segmentations/jobs` |
+| `segment:run` | `POST /v1/segmentations`, `/extend`, `/extend/batch`, `/jobs` |
 | `segment:read` | `GET /v1/segmentations/jobs/{id}` |
-| `series:write` | `POST /v1/uploads` |
-| `stream:write` | `POST /v1/streams`, appending, closing |
-| `stream:read` | `GET /v1/streams/{id}` |
 | `usage:read` | `GET /v1/account`, the usage and cost reports |
 | `keys:manage` | Keys, limits, webhook URL and secret |
 | `billing:manage` | Credit purchase, auto-reload |
 
 | Preset | Scopes | For |
 |---|---|---|
-| `full` | `segment:*`, `series:write`, `stream:*` | An ingest workload |
-| `read-only` | `segment:read`, `stream:read` | A dashboard that only fetches results |
-| `stream-only` | `stream:*` | An edge collector that only sends forming series |
+| `full` | `segment:run`, `segment:read` | An ingest workload |
+| `read-only` | `segment:read` | A dashboard that checks job status |
 | `admin` | `usage:read`, `keys:manage`, `billing:manage` | Admin keys only |
 
 Give each workload and each environment its own live key, with the narrowest preset that works. A leaked key is then one workload's problem, and its usage is visible on its own line of the usage report.

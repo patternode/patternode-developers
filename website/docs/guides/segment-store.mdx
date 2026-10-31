@@ -1,0 +1,38 @@
+---
+title: Your segment store
+sidebar_position: 5
+description: The library for your side. Keep what Patternode returns, query it by level and time, get a series' forward edge, and carry a forming series on with one call.
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import CodeBlock from '@theme/CodeBlock';
+import py from '!!raw-loader!@examples/python/segment_store.py';
+import ts from '!!raw-loader!@examples/typescript/src/segment-store.ts';
+
+# Your segment store
+
+Patternode keeps none of your series, so everything about a series lives on your side: its segments at every level, and for a forming series its edge. The segment store is the reference library for that side. It runs in your process, against your storage; Patternode never sees it.
+
+| Call | Does |
+|---|---|
+| `extend(pn, series, bars)` | The whole forming-series cycle: reads the stored edge, sends it with the new bars, stores what comes back. Safe to retry |
+| `apply_segmentation(series, result)` | Stores a finished series' answer, and its edge if you asked for one |
+| `apply_extension(series, result, expected_version)` | Stores an extension: closed segments final, the right edge replaced, the new edge, in one atomic write; refuses a stale writer |
+| `edge(series)` | The forward edge: the sealed token, when its last bar closed, the profile version, and the store's version |
+| `right_edge(series)` | The open segment at each level, bottom up |
+| `segments(series, level, start, end)` | Segments by level and time window |
+| `levels(series)` | The levels a series has |
+| `cut(series, start, end, width_px)` | What a chart of that width should draw over that window: the finest level wide enough to read. Zoom in and finer levels take over |
+| `trend(series)` | Rising, falling or steady at each timescale, from the open segment at levels 1, 2 and 3 |
+
+The Python version keeps a JSON file per series in a directory, one directory per client, written atomically; replace its two storage methods with your database or object store. The TypeScript version keeps them in memory. Both are tested against the mock in CI.
+
+<Tabs groupId="language">
+  <TabItem value="python" label="Python">
+    <CodeBlock language="python" title="examples/python/segment_store.py">{py}</CodeBlock>
+  </TabItem>
+  <TabItem value="typescript" label="TypeScript">
+    <CodeBlock language="ts" title="examples/typescript/src/segment-store.ts">{ts}</CodeBlock>
+  </TabItem>
+</Tabs>
