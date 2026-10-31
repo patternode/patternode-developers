@@ -11,7 +11,8 @@ so your code can be tested against the contract in specs/openapi.yaml.
 Like the service, the mock keeps none of your series. A forming series travels as its edge:
 the mock's edge is signed but readable, where the service's is also encrypted. Jobs read
 from and write to links you give; for tests, the mock serves a stand-in for your storage at
-/_bucket/<path> (GET and PUT, no key).
+/_bucket/<path> (GET and PUT, no key). It also serves the status page's files (specs/status.yaml)
+at /api/v2/, with no key, and the account's view at GET /v1/status.
 
 Any key of the right shape is accepted. A pnk_test_ key may run only {"demo": ...}, as in
 production. Webhooks for jobs are signed with PATTERNODE_MOCK_WEBHOOK_SECRET when it is set.
@@ -300,6 +301,76 @@ def extension(account: str, item: dict, unit_default: str = "ms") -> dict:
 
 # Webhooks ----------------------------------------------------------------------------
 
+# The status page (specs/status.yaml): the same files status.patternode.com serves, with no key.
+# Delve is listed but not in service; the sites are up. Invented history, the shapes are real.
+
+STATUS_COMPONENTS = [
+    ("delve", "Delve API", None, "not_in_service", "Segmentation, forming series, jobs, keys and account"),
+    ("delve-segmentation", "Segmentation", "delve", "not_in_service", "POST /v1/segmentations"),
+    ("delve-extend", "Forming series", "delve", "not_in_service", "POST /v1/segmentations/extend"),
+    ("delve-jobs", "Jobs", "delve", "not_in_service", "POST /v1/segmentations/jobs"),
+    ("delve-account", "Keys and account", "delve", "not_in_service", "/v1/keys, /v1/account"),
+    ("webhooks", "Webhooks", None, "not_in_service", "Event delivery to your endpoint"),
+    ("developer-portal", "Developer portal", None, "operational", "developers.patternode.com"),
+    ("website", "Website", None, "operational", "patternode.com"),
+]
+ACCOUNT_COMPONENTS = ("delve-segmentation", "delve-extend", "delve-jobs", "delve-account", "webhooks")
+
+
+def status_page() -> dict:
+    return {"id": "patternode", "name": "Patternode", "url": "https://status.patternode.com",
+            "time_zone": "Etc/UTC", "updated_at": iso()}
+
+
+def status_components() -> list[dict]:
+    out = []
+    for i, (cid, name, group, state, desc) in enumerate(STATUS_COMPONENTS):
+        c = {"id": cid, "name": name, "status": state, "description": desc, "group": any(x[2] == cid for x in STATUS_COMPONENTS),
+             "group_id": group, "position": i + 1, "only_show_if_degraded": False,
+             "created_at": "2026-11-01T00:00:00Z", "updated_at": iso()}
+        if c["group"]:
+            c["components"] = [x[0] for x in STATUS_COMPONENTS if x[2] == cid]
+        if state != "not_in_service":
+            c["uptime"] = {"day": 100.0, "week": 100.0, "quarter": 99.98}
+        out.append(c)
+    return out
+
+
+def status_file(name: str):
+    """The body of /api/v2/<name>, or None for no such file."""
+    page, components = status_page(), status_components()
+    indicator = {"indicator": "none", "description": "All systems operational"}
+    if name == "status.json":
+        return {"page": page, "status": indicator}
+    if name == "summary.json":
+        return {"page": page, "status": indicator, "components": components, "incidents": [],
+                "scheduled_maintenances": []}
+    if name == "components.json":
+        return {"page": page, "components": components}
+    if name in ("incidents.json", "incidents/unresolved.json"):
+        return {"page": page, "incidents": []}
+    if name == "scheduled-maintenances.json":
+        return {"page": page, "scheduled_maintenances": []}
+    m = re.fullmatch(r"uptime/([a-z0-9-]+)\.json", name)
+    if m and any(c["id"] == m.group(1) for c in components):
+        live = next(c for c in components if c["id"] == m.group(1))["status"] != "not_in_service"
+        day = 86400
+        return {"component": m.group(1),
+                "days": [{"date": time.strftime("%Y-%m-%d", time.gmtime(time.time() - (89 - i) * day)),
+                          "availability": 100.0 if live else None, "checks": 288 if live else 0,
+                          **({"latency_ms": {"p50": 41.0, "p95": 88.0}} if live else {})} for i in range(90)]}
+    return None
+
+
+def account_status(account: str) -> dict:
+    states = {c["id"]: c for c in status_components()}
+    return {"object": "account_status", "account": account, "plan": "evaluation", "jurisdiction": "anz",
+            "indicator": "none",
+            "components": [{"id": i, "name": states[i]["name"], "status": states[i]["status"]} for i in ACCOUNT_COMPONENTS],
+            "incidents": [], "scheduled_maintenances": [], "availability": None,
+            "page_url": "https://status.patternode.com", "checked_at": iso()}
+
+
 def sign(secret: str, msg_id: str, ts: int, body: bytes) -> str:
     key = base64.b64decode(secret.removeprefix("whsec_"))
     mac = hmac.new(key, f"{msg_id}.{ts}.".encode() + body, hashlib.sha256).digest()
@@ -401,6 +472,11 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path.startswith("/_bucket/"):  # a stand-in for the partner's own storage, no key
                 return self._bucket(method, path[len("/_bucket/"):])
+            if path.startswith("/api/v2/"):   # the status page's files, no key, read only
+                body = status_file(path[len("/api/v2/"):]) if method == "GET" else None
+                if body is None:
+                    return self._send(404, None, {"content-type": "text/html"}, raw=b"<h1>Not found</h1>")
+                return self._send(200, body, {"cache-control": "public, max-age=300", "access-control-allow-origin": "*"})
             ident = self._identity()
             body = self._body() if method in ("POST", "PATCH") else {}
             idem = self.headers.get("idempotency-key")
@@ -418,6 +494,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _dispatch(self, m: str, p: str, ident: dict, body: dict):
         acct = ident["account"]
+        if m == "GET" and p == "/v1/status":
+            return 200, account_status(acct), None
         if m == "GET" and p == "/v1/whoami":
             return 200, {"object": "key", "id": "key_mock", "kind": ident["kind"], "name": "mock",
                          "scopes": ident["scopes"], "account": acct, "tier": "evaluation", "expires_at": None}, None

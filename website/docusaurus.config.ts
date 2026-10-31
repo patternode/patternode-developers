@@ -95,6 +95,11 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag'},
             showSchemas: true,
           } satisfies OpenApiPlugin.Options,
+          status: {
+            specPath: '../specs/status.yaml',
+            outputDir: 'docs/status-api',
+            sidebarOptions: {groupPathsBy: 'tag'},
+          } satisfies OpenApiPlugin.Options,
         },
       },
     ],
@@ -154,6 +159,7 @@ const config: Config = {
           items: [
             {label: 'OpenAPI', href: 'pathname:///specs/openapi.yaml'},
             {label: 'AsyncAPI', href: 'pathname:///specs/asyncapi.yaml'},
+            {label: 'Status', href: 'https://status.patternode.com'},
             {label: 'llms.txt', href: 'pathname:///llms.txt'},
           ],
         },

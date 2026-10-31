@@ -53,6 +53,10 @@ tags:
       tree come out. Essence, Sentinel and Foresight will run on the same shards.
   - name: Usage
     description: What you used and what it cost.
+  - name: Status
+    description: |
+      Your account's view of Patternode's status. The public status, with no key, is
+      status.patternode.com and its API (`specs/status.yaml`), which answers when this API does not.
 paths:
   /v1/whoami:
     get:
@@ -77,6 +81,53 @@ paths:
                 account: acct_01JBX3ZK7T
                 tier: start
                 expires_at: "2027-01-28T00:00:00Z"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/status:
+    get:
+      operationId: getAccountStatus
+      summary: Status as it affects your account
+      description: |
+        The components that serve your account, in your home jurisdiction, with open incidents
+        and maintenance that touch them, and this month's measured availability against your
+        plan's target. Any key, no scope.
+
+        Served by this API, so it cannot report this API being down: when a call fails with
+        5xx, a timeout or `overloaded_error`, read `https://status.patternode.com/api/v2/status.json`
+        before alarming. Cheap and not billed; poll at most once a minute. For past months'
+        indicators, per jurisdiction, use `GET /v1/service_levels`.
+      tags: [Status]
+      x-status: planned
+      responses:
+        "200":
+          description: Your account's status.
+          headers:
+            request-id: { $ref: "#/components/headers/RequestId" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountStatus" }
+              example:
+                object: account_status
+                account: acct_01JBX3ZK7T
+                plan: production
+                jurisdiction: anz
+                indicator: minor
+                components:
+                  - { id: delve-segmentation, name: Segmentation, status: operational }
+                  - { id: delve-extend, name: Forming series, status: degraded_performance }
+                  - { id: delve-jobs, name: Jobs, status: operational }
+                incidents:
+                  - id: 2026-11-02-delve-latency
+                    name: Higher latency on forming series in Australia and New Zealand
+                    status: monitoring
+                    impact: minor
+                    started_at: "2026-11-02T02:41:00Z"
+                    components: [delve-extend]
+                    shortlink: https://status.patternode.com/incidents/2026-11-02-delve-latency/
+                scheduled_maintenances: []
+                availability: { period: "2026-11", target: 99.9, measured: 99.982, credit_eligible: false }
+                page_url: https://status.patternode.com
+                checked_at: "2026-11-02T03:15:04Z"
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /v1/segmentations:
@@ -1001,6 +1052,64 @@ components:
           oneOf:
             - type: "null"
             - $ref: "./schemas/error.schema.json#/properties/error"
+
+    AccountStatus:
+      type: object
+      required: [object, account, plan, jurisdiction, indicator, components, incidents, scheduled_maintenances, page_url, checked_at]
+      properties:
+        object: { const: account_status }
+        account: { type: string }
+        plan: { type: string, examples: [evaluation, production, mission_critical, dedicated] }
+        jurisdiction: { type: string, enum: [anz, eu, us] }
+        indicator:
+          type: string
+          enum: [none, minor, major, critical, maintenance]
+          description: The worst status among your components, as in the public status API.
+        components:
+          type: array
+          items:
+            type: object
+            required: [id, name, status]
+            properties:
+              id: { type: string, description: "The public status API's component id." }
+              name: { type: string }
+              status:
+                type: string
+                enum: [operational, degraded_performance, partial_outage, major_outage, under_maintenance, not_in_service]
+        incidents:
+          type: array
+          description: Open incidents that touch your components in your jurisdiction.
+          items: { $ref: "#/components/schemas/StatusIncidentRef" }
+        scheduled_maintenances:
+          type: array
+          description: Maintenance scheduled or in progress that touches your components in your jurisdiction.
+          items: { $ref: "#/components/schemas/StatusIncidentRef" }
+        availability:
+          type: [object, "null"]
+          description: |
+            This calendar month (UTC), measured as the service contract defines it. Null on a
+            plan with no availability target.
+          properties:
+            period: { type: string, examples: ["2026-11"] }
+            target: { type: number, description: "Your plan's target, a percentage." }
+            measured: { type: [number, "null"], description: So far this month. }
+            credit_eligible: { type: boolean, description: True once the month is below target and a service credit applies. }
+        page_url: { type: string, format: uri }
+        checked_at: { type: string, format: date-time }
+
+    StatusIncidentRef:
+      type: object
+      required: [id, name, status, impact, components, shortlink]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [investigating, identified, monitoring, resolved, scheduled, in_progress, verifying, completed] }
+        impact: { type: string, enum: [none, minor, major, critical, maintenance] }
+        started_at: { type: [string, "null"], format: date-time }
+        scheduled_for: { type: [string, "null"], format: date-time }
+        scheduled_until: { type: [string, "null"], format: date-time }
+        components: { type: array, items: { type: string } }
+        shortlink: { type: string, format: uri }
 
     KeyIdentity:
       type: object

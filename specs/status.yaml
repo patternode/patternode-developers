@@ -1,0 +1,308 @@
+openapi: 3.1.0
+info:
+  title: Patternode status
+  version: 1.0.0-draft
+  summary: Whether Patternode's services are up, what is wrong, and what maintenance is planned.
+  description: |
+    The status of every service Patternode offers customers, served by status.patternode.com.
+    It is static files, published apart from the services it reports on, so it answers when
+    they do not. No key: anyone may read it, and nothing in it is about your account. For
+    your account's view (your jurisdiction, your plan, this month's availability against its
+    target) call `GET /v1/status` on the API, and for a push when an incident opens, subscribe
+    to the `status.*` events on your webhook endpoint.
+
+    The shapes follow the Atlassian Statuspage `/api/v2/` format, the one most status tools
+    read, so a monitor, chat app or agent that reads that format reads this one. The one
+    addition is the component status `not_in_service`, for a service listed before it is
+    offered; a client that does not know it should treat it as unknown, never as operational.
+
+    How it is measured: probes from outside Patternode call each service every 5 minutes (a
+    run may be late by several minutes), and a component is marked down after two failures in
+    a row. An open incident overrides the probes. Each file is cached for up to 5 minutes;
+    `page.updated_at` says when the probes last ran, and a page more than 30 minutes old says
+    so instead of showing green.
+
+    Also served, not described here: the page itself (`/`), each incident (`/incidents/{id}/`),
+    an Atom feed (`/feed.atom`) and RSS (`/feed.rss`) of incidents and maintenance, a badge per
+    component (`/badge/{component}.svg`) and `/llms.txt`.
+  contact:
+    name: Patternode partner support
+    email: partners@patternode.com
+  license:
+    name: Apache 2.0
+    identifier: Apache-2.0
+servers:
+  - url: https://status.patternode.com
+    description: The status page.
+  - url: http://localhost:4010
+    description: The mock server in mock/, which serves these routes too.
+security: []
+tags:
+  - name: Status
+    description: Read-only, no key, cacheable.
+paths:
+  /api/v2/status.json:
+    get:
+      operationId: getStatus
+      tags: [Status]
+      summary: One indicator for everything
+      description: The cheapest call. Poll it, at most once a minute, before alarming on Patternode.
+      x-status: planned
+      responses:
+        "200":
+          description: The overall status.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [page, status]
+                properties:
+                  page: { $ref: "#/components/schemas/Page" }
+                  status: { $ref: "#/components/schemas/Indicator" }
+              example:
+                page: { id: patternode, name: Patternode, url: https://status.patternode.com, time_zone: Etc/UTC, updated_at: "2026-11-02T03:15:04Z" }
+                status: { indicator: none, description: All systems operational }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v2/summary.json:
+    get:
+      operationId: getSummary
+      tags: [Status]
+      summary: Everything on the page
+      description: The overall status, every component, open incidents and maintenance that is in progress or coming.
+      x-status: planned
+      responses:
+        "200":
+          description: The summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [page, status, components, incidents, scheduled_maintenances]
+                properties:
+                  page: { $ref: "#/components/schemas/Page" }
+                  status: { $ref: "#/components/schemas/Indicator" }
+                  components: { type: array, items: { $ref: "#/components/schemas/Component" } }
+                  incidents: { type: array, items: { $ref: "#/components/schemas/Incident" }, description: Unresolved incidents. }
+                  scheduled_maintenances: { type: array, items: { $ref: "#/components/schemas/Incident" }, description: Maintenance scheduled or in progress. }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v2/components.json:
+    get:
+      operationId: listComponents
+      tags: [Status]
+      summary: Components and their status
+      x-status: planned
+      responses:
+        "200":
+          description: Every component, groups included.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [page, components]
+                properties:
+                  page: { $ref: "#/components/schemas/Page" }
+                  components: { type: array, items: { $ref: "#/components/schemas/Component" } }
+              example:
+                page: { id: patternode, name: Patternode, url: https://status.patternode.com, time_zone: Etc/UTC, updated_at: "2026-11-02T03:15:04Z" }
+                components:
+                  - { id: delve, name: Delve API, status: not_in_service, group: true, group_id: null, components: [delve-segmentation, delve-extend, delve-jobs, delve-account], position: 1, description: "Segmentation, forming series, jobs, keys and account", created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z", only_show_if_degraded: false }
+                  - { id: delve-segmentation, name: Segmentation, status: not_in_service, group: false, group_id: delve, position: 1, description: "POST /v1/segmentations", created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z", only_show_if_degraded: false }
+                  - { id: developer-portal, name: Developer portal, status: operational, group: false, group_id: null, position: 3, description: developers.patternode.com, created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-02T03:15:04Z", only_show_if_degraded: false, uptime: { day: 100.0, week: 100.0, quarter: 99.98 } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v2/incidents.json:
+    get:
+      operationId: listIncidents
+      tags: [Status]
+      summary: Incidents of the last 90 days
+      x-status: planned
+      responses:
+        "200":
+          description: Incidents, newest first, resolved ones included.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IncidentList" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v2/incidents/unresolved.json:
+    get:
+      operationId: listUnresolvedIncidents
+      tags: [Status]
+      summary: Open incidents
+      x-status: planned
+      responses:
+        "200":
+          description: Incidents not yet resolved, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IncidentList" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v2/scheduled-maintenances.json:
+    get:
+      operationId: listScheduledMaintenances
+      tags: [Status]
+      summary: Maintenance, past and planned
+      x-status: planned
+      responses:
+        "200":
+          description: Maintenance windows, upcoming first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [page, scheduled_maintenances]
+                properties:
+                  page: { $ref: "#/components/schemas/Page" }
+                  scheduled_maintenances: { type: array, items: { $ref: "#/components/schemas/Incident" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v2/uptime/{component}.json:
+    get:
+      operationId: getComponentUptime
+      tags: [Status]
+      summary: A component's last 90 days
+      description: Daily availability and probe latency. Not part of the Statuspage format.
+      x-status: planned
+      parameters:
+        - name: component
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-z0-9-]+$" }
+          example: developer-portal
+      responses:
+        "200":
+          description: One entry per UTC day, oldest first. A day the component was not in service has `availability` null.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Uptime" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  responses:
+    NotFound:
+      description: No such file, or the status API is not published yet.
+      content:
+        text/html:
+          schema: { type: string }
+
+  schemas:
+    Page:
+      type: object
+      required: [id, name, url, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        url: { type: string, format: uri }
+        time_zone: { type: string, default: Etc/UTC }
+        updated_at: { type: string, format: date-time, description: When the probes last ran. }
+
+    Indicator:
+      type: object
+      required: [indicator, description]
+      properties:
+        indicator:
+          type: string
+          enum: [none, minor, major, critical, maintenance]
+          description: |
+            The worst of the components in service: `none` when all are operational, `minor`
+            for degraded performance, `major` for a partial outage, `critical` for a major
+            outage, `maintenance` when maintenance is the worst there is.
+        description: { type: string, examples: ["All systems operational", "Partial outage"] }
+
+    ComponentStatus:
+      type: string
+      enum: [operational, degraded_performance, partial_outage, major_outage, under_maintenance, not_in_service]
+      description: |
+        `not_in_service`: listed, not offered yet; never probed, never counted in the indicator
+        or in availability. Treat a value you do not know as unknown.
+
+    Component:
+      type: object
+      required: [id, name, status, group, position]
+      properties:
+        id: { type: string, description: "Stable. Use it, not the name.", examples: [delve-segmentation] }
+        name: { type: string }
+        status: { $ref: "#/components/schemas/ComponentStatus" }
+        description: { type: [string, "null"] }
+        group: { type: boolean, description: True for a group; its status is the worst of its components. }
+        group_id: { type: [string, "null"] }
+        components: { type: array, items: { type: string }, description: "For a group, its components' ids." }
+        position: { type: integer }
+        only_show_if_degraded: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        uptime:
+          type: object
+          description: Availability as a percentage, for a component in service. Not part of the Statuspage format.
+          properties:
+            day: { type: [number, "null"] }
+            week: { type: [number, "null"] }
+            quarter: { type: [number, "null"], description: The last 90 days. }
+
+    IncidentUpdate:
+      type: object
+      required: [id, status, body, created_at]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [investigating, identified, monitoring, resolved, scheduled, in_progress, verifying, completed] }
+        body: { type: string, description: "Plain text, written for customers." }
+        created_at: { type: string, format: date-time }
+        affected_components:
+          type: array
+          items:
+            type: object
+            properties:
+              code: { type: string, description: The component id. }
+              name: { type: string }
+              old_status: { $ref: "#/components/schemas/ComponentStatus" }
+              new_status: { $ref: "#/components/schemas/ComponentStatus" }
+
+    Incident:
+      type: object
+      required: [id, name, status, impact, created_at, updated_at, shortlink, components, incident_updates]
+      properties:
+        id: { type: string, examples: ["2026-11-02-delve-latency"] }
+        name: { type: string }
+        status:
+          type: string
+          enum: [investigating, identified, monitoring, resolved, scheduled, in_progress, verifying, completed]
+          description: Incidents run investigating to resolved; maintenance runs scheduled to completed.
+        impact: { type: string, enum: [none, minor, major, critical, maintenance] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        started_at: { type: [string, "null"], format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
+        scheduled_for: { type: [string, "null"], format: date-time, description: Maintenance only. }
+        scheduled_until: { type: [string, "null"], format: date-time, description: Maintenance only. }
+        shortlink: { type: string, format: uri, description: The incident's page. }
+        components: { type: array, items: { $ref: "#/components/schemas/Component" } }
+        incident_updates: { type: array, items: { $ref: "#/components/schemas/IncidentUpdate" }, description: Newest first. }
+        jurisdictions:
+          type: array
+          items: { type: string, enum: [anz, eu, us] }
+          description: The jurisdictions affected; empty for all. Not part of the Statuspage format.
+
+    IncidentList:
+      type: object
+      required: [page, incidents]
+      properties:
+        page: { $ref: "#/components/schemas/Page" }
+        incidents: { type: array, items: { $ref: "#/components/schemas/Incident" } }
+
+    Uptime:
+      type: object
+      required: [component, days]
+      properties:
+        component: { type: string }
+        days:
+          type: array
+          maxItems: 90
+          items:
+            type: object
+            required: [date, availability]
+            properties:
+              date: { type: string, format: date }
+              availability: { type: [number, "null"], description: Percentage of probes that passed. }
+              checks: { type: integer }
+              latency_ms:
+                type: object
+                properties:
+                  p50: { type: number }
+                  p95: { type: number }

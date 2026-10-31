@@ -58,6 +58,10 @@ channels:
       jobFailed: { $ref: "#/components/messages/jobFailed" }
       keyExpiring: { $ref: "#/components/messages/keyExpiring" }
       balanceLow: { $ref: "#/components/messages/balanceLow" }
+      incidentOpened: { $ref: "#/components/messages/incidentOpened" }
+      incidentUpdated: { $ref: "#/components/messages/incidentUpdated" }
+      incidentResolved: { $ref: "#/components/messages/incidentResolved" }
+      maintenanceScheduled: { $ref: "#/components/messages/maintenanceScheduled" }
 
 operations:
   receiveJobEvents:
@@ -74,6 +78,19 @@ operations:
     messages:
       - $ref: "#/channels/webhook/messages/keyExpiring"
       - $ref: "#/channels/webhook/messages/balanceLow"
+  receiveStatusEvents:
+    action: send
+    title: Patternode tells you about incidents and maintenance that touch your account
+    description: |
+      Only incidents and maintenance on components that serve your account, in your home
+      jurisdiction. The same incident's events share `data.id`; order them by `created_at`.
+      The public status page and its Atom feed carry every incident, for anyone.
+    channel: { $ref: "#/channels/webhook" }
+    messages:
+      - $ref: "#/channels/webhook/messages/incidentOpened"
+      - $ref: "#/channels/webhook/messages/incidentUpdated"
+      - $ref: "#/channels/webhook/messages/incidentResolved"
+      - $ref: "#/channels/webhook/messages/maintenanceScheduled"
 
 components:
   securitySchemes:
@@ -179,3 +196,73 @@ components:
           type: { const: account.balance_low }
           created_at: { type: string, format: date-time }
           data: { $ref: "./openapi.yaml#/components/schemas/Account" }
+
+    incidentOpened:
+      name: status.incident.opened
+      title: An incident opened on a component that serves you
+      x-status: planned
+      traits: [{ $ref: "#/components/messageTraits/signed" }]
+      payload:
+        type: object
+        required: [id, type, data]
+        properties:
+          id: { type: string }
+          type: { const: status.incident.opened }
+          created_at: { type: string, format: date-time }
+          data: { $ref: "./openapi.yaml#/components/schemas/StatusIncidentRef" }
+      examples:
+        - payload:
+            id: evt_01JC2M7Q0A
+            type: status.incident.opened
+            created_at: "2026-11-02T02:44:10Z"
+            data:
+              id: 2026-11-02-delve-latency
+              name: Higher latency on forming series in Australia and New Zealand
+              status: investigating
+              impact: minor
+              started_at: "2026-11-02T02:41:00Z"
+              components: [delve-extend]
+              shortlink: https://status.patternode.com/incidents/2026-11-02-delve-latency/
+
+    incidentUpdated:
+      name: status.incident.updated
+      title: An open incident changed status, impact or components
+      x-status: planned
+      traits: [{ $ref: "#/components/messageTraits/signed" }]
+      payload:
+        type: object
+        required: [id, type, data]
+        properties:
+          id: { type: string }
+          type: { const: status.incident.updated }
+          created_at: { type: string, format: date-time }
+          data: { $ref: "./openapi.yaml#/components/schemas/StatusIncidentRef" }
+
+    incidentResolved:
+      name: status.incident.resolved
+      title: An incident was resolved
+      x-status: planned
+      traits: [{ $ref: "#/components/messageTraits/signed" }]
+      payload:
+        type: object
+        required: [id, type, data]
+        properties:
+          id: { type: string }
+          type: { const: status.incident.resolved }
+          created_at: { type: string, format: date-time }
+          data: { $ref: "./openapi.yaml#/components/schemas/StatusIncidentRef" }
+
+    maintenanceScheduled:
+      name: status.maintenance.scheduled
+      title: Maintenance was scheduled on a component that serves you
+      summary: Sent when it is scheduled and again 24 hours before it starts.
+      x-status: planned
+      traits: [{ $ref: "#/components/messageTraits/signed" }]
+      payload:
+        type: object
+        required: [id, type, data]
+        properties:
+          id: { type: string }
+          type: { const: status.maintenance.scheduled }
+          created_at: { type: string, format: date-time }
+          data: { $ref: "./openapi.yaml#/components/schemas/StatusIncidentRef" }

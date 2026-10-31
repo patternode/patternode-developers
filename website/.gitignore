@@ -4,4 +4,5 @@ build/
 .cache-loader/
 # Generated from ../specs by `npm run gen`
 docs/api/
+docs/status-api/
 docs/events/

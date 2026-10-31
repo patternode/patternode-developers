@@ -42,7 +42,7 @@ Rules:
 | The contract suite | `python -m unittest discover -s tests/contract -v` (mock); with `PATTERNODE_BASE_URL` and `PATTERNODE_API_KEY`, against a deployment |
 | Redraw the diagrams | `python website/diagrams/architecture.py` (edit the script, never the SVGs) |
 | Test the TypeScript examples | `cd examples/typescript && npm test` (mock running) |
-| Lint the specs | `npx @redocly/cli@2 lint specs/openapi.yaml` and `npx @asyncapi/cli@6 validate specs/asyncapi.yaml` |
+| Lint the specs | `npx @redocly/cli@2 lint specs/openapi.yaml specs/status.yaml` and `npx @asyncapi/cli@6 validate specs/asyncapi.yaml` |
 | Build the site | `cd website && npm ci && npm run build` (regenerates the API and events pages; fails on broken links) |
 | Preview the site | `cd website && npm start` |
 

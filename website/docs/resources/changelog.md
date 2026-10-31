@@ -8,6 +8,7 @@ description: Changes to the API, the events, the profiles and this site.
 
 ## Unreleased
 
+- Service status: the status page's API with no key (`specs/status.yaml`, Statuspage format, with `not_in_service` for Delve until it opens), your account's view `GET /v1/status`, and `status.*` events on your webhook endpoint. All planned; the mock serves them.
 - Error `storage_unreachable`: a job failed, uncharged, because Patternode could not read its `source_url` or write its `result_url`.
 
 ## 1.0.0-draft.2, 2026-10-31
