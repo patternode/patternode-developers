@@ -49,7 +49,7 @@ Rules:
 
 Writing: plain words, short sentences, tables for anything with more than two attributes. No em dashes inside a sentence; no bold inside a sentence. `.md` pages are CommonMark; use `.mdx` only when a page imports code or components.
 
-<!-- playbook:begin 1.0.1: generated from patternode-architecture governance/playbook/agents-block.md by playbook.mjs sync. Do not edit here. -->
+<!-- playbook:begin 1.1.0 sha256:44aae636393c49d7: generated from patternode-architecture governance/playbook/agents-block.md by playbook.mjs sync. Do not edit here. -->
 
 ## The Patternode playbook
 
