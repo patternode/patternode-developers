@@ -12,6 +12,7 @@ description: What Patternode is responsible for, and what you are.
 | Your keys | Never seeing a live key after it is created; revoking within a minute of your request | Keeping keys in a secret store; rotating them; scoping them narrowly |
 | Network | The edge and everything behind it | Your network to the edge; private connectivity on your side |
 | Your data | Keeping none of it; processing it only in your jurisdiction | Sending only what is needed; naming series opaquely; keeping the mapping |
+| Data a product keeps for you (planned) | Keeping it in your own tenancy, each of your clients in its own zone and key, as [Data management](data-management.md) says | Telling Patternode which clients' data it holds for you, and passing on to your clients what that page says |
 | Segments | Returning them deterministically per profile version | Storing them; drawing them; deciding what they mean for your users |
 | Real-time | Answering the same edge and bars with the same result; keeping nothing; delivering events at least once | Storing segments and edges in one write, one writer per series; resending unchanged on retry; deduplicating events |
 | Failover | Moving your traffic within the plan's recovery time | A client that resends unanswered requests and reconnects ([Resilience](resilience.md)) |

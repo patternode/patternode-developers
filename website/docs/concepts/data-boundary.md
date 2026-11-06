@@ -6,7 +6,7 @@ description: What Patternode receives, keeps and never sees, and how to name ser
 
 # Data boundary
 
-Patternode keeps none of your series: no copies, no checkpoints, no results.
+Patternode keeps none of your series: no copies, no checkpoints, no results. Products that will keep data for you, and how that data is managed, are on [Data management](../service/data-management.md).
 
 | | Finished series | Forming series |
 |---|---|---|
