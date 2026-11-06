@@ -44,6 +44,7 @@ const sidebars: SidebarsConfig = {
         'service/resilience',
         'service/realtime',
         'service/security',
+        'service/data-management',
         'service/compliance',
         'service/support',
         'service/shared-responsibility',
