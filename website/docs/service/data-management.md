@@ -46,6 +46,48 @@ If you use Patternode for yourself rather than for clients, your tenancy has one
 - Nothing moves from one client's zone to another's.
 - Data Patternode offers every customer (market data, reference data) reaches your products by reference, under its licence. Your data never enters it.
 
+## The facets of a thing
+
+A thing you manage (a utility asset, a company, a financial instrument) is one entity with one key, and everything known about it is grouped into facets. The same fourteen facets fit every kind of thing, and a product keeps only the ones it needs. Any of the three parties below can keep any facet.
+
+| Group | Facet | Holds | Form |
+|---|---|---|---|
+| What it is | Identity | Its key, its names, and every external identifier it is known by | Table |
+| What it is | Classification | Its type and categories, from a versioned taxonomy | Table |
+| What it is | Attributes | Its properties, each dated with when it held | Table |
+| What it is | Profile | A structured description: a specification, a business description, terms | Document |
+| What it is | Location | Where it is: points, shapes, sites, venues | Table |
+| What it is | Parties | Who owns, operates, manages, holds or services it, and in what role | Table |
+| How it connects | Relations | Typed links to other things, including what it is part of | Graph |
+| How it changes | Measurements | Values observed over time, at any frequency | Series |
+| How it changes | Metrics | Values reported or computed for a period, which may be restated | Series |
+| How it changes | Events | Things that happened to it, at a time | Table |
+| What is written or drawn | Documents | Unstructured content about it | File |
+| What is written or drawn | Media | Images, posters, logos, video | File |
+| What is written or drawn | Shape | Its geometry, with levels of detail, such as a 3D model | Model |
+| What is derived | Enrichment | Model outputs about it (segments, signals, scores, forecasts, extracted facts), each stamped with its model version | Graph, series, document, vector |
+
+The same facets, for three kinds of thing:
+
+| Facet | Utility asset | Company | Financial instrument |
+|---|---|---|---|
+| Identity | Asset tag, serial number, historian tags | Registration and legal entity identifiers, legal and former names | Security identifiers, dated tickers and venues |
+| Classification | Asset type: inverter, transformer | Sector and industry | Asset class and instrument type |
+| Attributes | Rating, install date, firmware | Country, fiscal year end, headcount | Currency, lot size, tick size, listing date |
+| Profile | Datasheet parameters | Business description and segments | Terms: coupon and maturity, contract specification |
+| Location | Site and coordinates, network position | Headquarters and facilities | Listing venue, country of risk |
+| Parties | Owner, operator, maintainer | Officers, directors, major holders | Issuer's agents, holders, market makers |
+| Relations | Part of, feeds, monitors, located at | Subsidiary of, supplier of, peer of, issues | Issued by, constituent of, underlying of |
+| Measurements | Sensor readings | Through its instruments | Prices, quotes, volume |
+| Metrics | Availability, energy yield | Fundamentals and consensus | Returns, volatility, spreads |
+| Events | Alarms, work orders, inspections | Earnings, filings, guidance | Splits, dividends, halts |
+| Documents | Manuals, inspection reports | Filings, transcripts, releases | Prospectus, term sheet |
+| Media | Photos, a card's poster | Logo | A chart poster |
+| Shape | The type's 3D model and the asset's scan | None | None |
+| Enrichment | Segments, anomaly scores, document extractions | Extracted facts, scores | Segments, pattern matches, signals |
+
+A 360 view of a thing shows its facets together: a header from identity, classification and the latest events, then attributes and parties, the latest value and recent shape of each measurement, recent metrics and events on one timeline, its documents and media, and its shape where it has one. The next section is how a view combines facets kept by different parties.
+
 ## Combining your data with your clients' and Patternode's
 
 You, your client and Patternode may each keep facets about the same asset, company or instrument, each under its own key. Each of you can build one 360 view of it from your own facets and the others', without copying them.
