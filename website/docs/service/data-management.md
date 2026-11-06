@@ -117,12 +117,12 @@ Every read and change of your tenancy's data, every use of its keys, and every s
 
 ## Roles
 
-| Arrangement | Controller | Processor | Sub-processor |
+| Arrangement | Controller | Processor | Subprocessor |
 |---|---|---|---|
 | You use Patternode for yourself | You | Patternode | Patternode's cloud providers |
 | You serve your clients | Your client | You | Patternode, and its cloud providers |
 
-Your terms confirm the roles. If an incident may touch personal data in your tenancy, Patternode tells you without undue delay, with what is known, so you and your clients can meet your own obligations ([Support](support.md)).
+Your terms confirm the roles. [Your data, by role](your-role.md) explains each one, with the entry a vendor gives its clients to describe Patternode as its subprocessor. If an incident may touch personal data in your tenancy, Patternode tells you without undue delay, with what is known, so you and your clients can meet your own obligations ([Support](support.md)).
 
 ## What you can tell your clients
 
@@ -140,6 +140,8 @@ A table you can adapt and pass on. Replace the names with yours.
 | Can I have it back, and how is it deleted? | Yes, in open formats. Deletion removes your zone everywhere and destroys its key, so no copy can be read afterwards |
 
 ## Related
+
+- [Your data, by role](your-role.md): for a vendor, a customer, and a customer whose vendor uses Patternode, with the subprocessor entry a vendor gives its clients.
 
 - [Data boundary](../concepts/data-boundary.md): what Delve receives and keeps (nothing of your series).
 - [Security](security.md): authentication, network, encryption and audit.
