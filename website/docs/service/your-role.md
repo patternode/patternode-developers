@@ -10,7 +10,7 @@ Three kinds of organisation meet Patternode, and each needs a different account 
 
 | You are | You contract with | Patternode is | Read |
 |---|---|---|---|
-| A vendor that builds Patternode into its product for its clients (monitoring, analytics, risk) | Patternode | Your subprocessor, for your clients' data | [A vendor using Patternode](#a-vendor-using-patternode), then [Describing Patternode to your clients](#describing-patternode-to-your-clients) |
+| A vendor that builds Patternode into its product for its clients (monitoring, analytics, risk) | Patternode | Your subprocessor, for your clients' data | [A vendor using Patternode](#a-vendor-using-patternode), then [Patternode as a subprocessor](subprocessor.md) |
 | A customer that uses Patternode directly (a utility, a fund, a bank) | Patternode | Your processor | [A customer using Patternode](#a-customer-using-patternode) |
 | A customer whose vendor uses Patternode | Your vendor, not Patternode | Your vendor's subprocessor | [A customer whose vendor uses Patternode](#a-customer-whose-vendor-uses-patternode) |
 
@@ -38,7 +38,7 @@ What you do:
 
 | Your obligation | How Patternode supports it |
 |---|---|
-| Name Patternode as a subprocessor to your clients, in your subprocessor list and your agreements with them | [Describing Patternode to your clients](#describing-patternode-to-your-clients) below gives the words |
+| Name Patternode as a subprocessor to your clients, in your subprocessor list and your agreements with them | [Patternode as a subprocessor](subprocessor.md) gives the words |
 | Pass Patternode's terms down: the data processing agreement, the locations, the security commitments | The [data processing agreement and assurance](compliance.md) on every plan |
 | Tell your clients before Patternode's own subprocessors change, as your agreements require | Patternode gives you 30 days' notice of a change to its subprocessor list |
 | Send only what is needed. With Delve, keep series names opaque and keep the mapping to clients and assets yourself | [Data boundary](../concepts/data-boundary.md) |
@@ -50,36 +50,7 @@ What you do:
 
 ## Describing Patternode to your clients
 
-Use the entry that matches the mode you use, in your subprocessor list or your agreement with each client. Replace the bracketed parts. The legal entity, its address and the locations are those in your agreement with Patternode.
-
-### Delve: Patternode keeps nothing
-
-| | |
-|---|---|
-| Subprocessor | Patternode ([legal entity, address]) |
-| Service | Segmentation of time series |
-| Data processed | Readings of the series we monitor for you, each under an opaque name that does not identify you, your sites or your assets |
-| Purpose | To compute segments that our product shows you |
-| Kept by Patternode | Nothing of the readings or the results. Usage records (counts and times) for billing |
-| Location | [the jurisdiction in your agreement with Patternode] |
-| Security | Encrypted in transit; Patternode's SOC 2 Type II report and ISO/IEC 27001 certification |
-| Further subprocessors | Patternode's cloud providers, as in its subprocessor list, with 30 days' notice of change |
-
-### A product that keeps data (`planned`)
-
-| | |
-|---|---|
-| Subprocessor | Patternode ([legal entity, address]) |
-| Service | [the product: for example, storage and analysis of asset data and its 360 view] |
-| Data processed | [the datasets: for example, your asset register, readings, documents and 3D models] |
-| Purpose | To provide our product's [named features] to you |
-| Where it is kept | In a zone of its own inside our tenancy on Patternode, under its own encryption key, with its own databases. No other client of ours can read it |
-| Who can read it | Your users, us under our agreement with you, and Patternode's services acting for us. Not Patternode's research, its staff (except recorded emergency access you are shown), or any other customer |
-| Used for | Only our service to you. Benchmarks only with your agreement, and only as aggregates. Never to train models for anyone else |
-| Kept for | [the retention in your agreement]; deleted with its key destroyed when you leave or ask |
-| Location | [the region in your agreement with Patternode] |
-| Audit | Every access is recorded and can be given to you for your data |
-| Further subprocessors | Patternode's cloud providers, as in its subprocessor list, with 30 days' notice of change |
+[Patternode as a subprocessor](subprocessor.md) has what you keep for your own records and what you show your clients: an entry for your record of processing, your subprocessor entry for each mode, a notice of change, and what to check before you go live.
 
 ## A customer using Patternode
 
@@ -98,7 +69,7 @@ If you also use a vendor that uses Patternode, the two are separate: your own te
 
 ## A customer whose vendor uses Patternode
 
-Your vendor uses Patternode to provide its service to you. You contract with your vendor; Patternode is your vendor's subprocessor, and acts only on your vendor's instructions under its agreement with Patternode. Your vendor should name Patternode in its subprocessor list, using an entry like those above.
+Your vendor uses Patternode to provide its service to you. You contract with your vendor; Patternode is your vendor's subprocessor, and acts only on your vendor's instructions under its agreement with Patternode. Your vendor should name Patternode in its subprocessor list, with an entry like those on [Patternode as a subprocessor](subprocessor.md#part-2-what-you-show-your-clients).
 
 What to ask your vendor:
 

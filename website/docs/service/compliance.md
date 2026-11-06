@@ -15,7 +15,7 @@ description: Assurance reports Patternode provides, and how the service supports
 | Penetration test summary, every year | Mission Critical, Dedicated |
 | Completed security questionnaire (CAIQ, SIG Lite) | On request |
 | Right to audit, with notice | Dedicated |
-| Subprocessor list, with 30 days' notice of change | All |
+| Subprocessor list, with 30 days' notice of change ([Patternode as a subprocessor](subprocessor.md) for a vendor's own entry) | All |
 | Data processing agreement | All |
 
 ## Regimes
